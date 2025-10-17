@@ -1,0 +1,64 @@
+{
+  "placeFeatures": {
+    "mainCategory": {
+      "food_cafe": 0,
+      "culture_art": 0,
+      "activity_sports": 0,
+      "nature_healing": 0,
+      "craft_experience": 0,
+      "shopping": 0
+    },
+    "atmosphere": {
+      "quiet": 0.0,
+      "romantic": 0.0,
+      "trendy": 0.0,
+      "private": 0.0,
+      "artistic": 0.0,
+      "energetic": 0.0
+    },
+    "experienceType": {
+      "passive_enjoyment": 0.0,
+      "active_participation": 0.0,
+      "social_bonding": 0.0,
+      "relaxation_focused": 0.0
+    },
+    "spaceCharacteristics": {
+      "indoor_ratio": 0.0,
+      "crowdedness_expected": 0.0,
+      "photo_worthiness": 0.0,
+      "scenic_view": 0.0
+    },
+    "contextual": {
+      "time_preference": "afternoon",
+      "day_preference": [0, 0, 0, 0, 0, 0, 0],
+      "budget_range": [0, 100000],
+      "max_travel_distance": 3.0,
+      "average_rating": 4.5,
+      "review_count": 245,
+      "additional_filters": {
+        "weather_suitability": null,
+        "season_suitability": null,
+        "accessibility": {
+          "public_transport": null,
+          "parking_available": null,
+          "wheelchair_accessible": null,
+          "walking_distance": null
+        },
+        "convenience": {
+          "reservation_required": null,
+          "reservation_difficulty": null,
+          "spontaneous_visit": null,
+          "child_friendly": null,
+          "pet_friendly": null
+        }
+      }
+    },
+    "relationshipStageProfile": {
+      "first_date": 0.0,
+      "early_dating": 0.0,
+      "established": 0.0,
+      "long_term": 0.0,
+      "celebration": 0.0
+    }
+  }
+}
