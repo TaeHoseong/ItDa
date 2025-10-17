@@ -1,0 +1,165 @@
+(SWP) hoseong@taehoseong-ui-noteubug ItDa % python3 update_feats.py
+used prompt: 
+        아래는 장소의 기본 정보입니다:
+        ---
+        이름: 마타렐로
+        카테고리: 이탈리아 음식점
+        평점: 4.5
+        가격대: ₩20000 ~ ₩30000
+        영업시간: ["월요일: 휴무일", "화요일: 오전 11:00 ~ 오후 10:00", "수요일: 오전 11:00 ~ 오후 10:00", "목요일: 오전 11:00 ~ 오후 10:00", "금요일: 오전 11:00 ~ 오후 10:00", "토요일: 오전 11:00 ~ 오후 10:00", "일요일: 오전 11:00 ~ 오후 10:00"]
+        ---
+        아래 JSON 템플릿을 참고해서, 각 항목을 0~1 사이 값으로 합리적으로 채워주세요.
+        JSON 형식을 유지하고, 불필요한 설명 없이 JSON만 반환하세요.
+
+        템플릿:
+        {
+  "placeFeatures": {
+    "mainCategory": {
+      "food_cafe": 0,
+      "culture_art": 0,
+      "activity_sports": 0,
+      "nature_healing": 0,
+      "craft_experience": 0,
+      "shopping": 0
+    },
+    "atmosphere": {
+      "quiet": 0.0,
+      "romantic": 0.0,
+      "trendy": 0.0,
+      "private": 0.0,
+      "artistic": 0.0,
+      "energetic": 0.0
+    },
+    "experienceType": {
+      "passive_enjoyment": 0.0,
+      "active_participation": 0.0,
+      "social_bonding": 0.0,
+      "relaxation_focused": 0.0
+    },
+    "spaceCharacteristics": {
+      "indoor_ratio": 0.0,
+      "crowdedness_expected": 0.0,
+      "photo_worthiness": 0.0,
+      "scenic_view": 0.0
+    },
+    "contextual": {
+      "time_preference": "afternoon",
+      "day_preference": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "budget_range": [
+        0,
+        100000
+      ],
+      "max_travel_distance": 3.0,
+      "average_rating": 4.5,
+      "review_count": 245,
+      "additional_filters": {
+        "weather_suitability": null,
+        "season_suitability": null,
+        "accessibility": {
+          "public_transport": null,
+          "parking_available": null,
+          "wheelchair_accessible": null,
+          "walking_distance": null
+        },
+        "convenience": {
+          "reservation_required": null,
+          "reservation_difficulty": null,
+          "spontaneous_visit": null,
+          "child_friendly": null,
+          "pet_friendly": null
+        }
+      }
+    },
+    "relationshipStageProfile": {
+      "first_date": 0.0,
+      "early_dating": 0.0,
+      "established": 0.0,
+      "long_term": 0.0,
+      "celebration": 0.0
+    }
+  }
+}
+        
+{
+  "placeFeatures": {
+    "mainCategory": {
+      "food_cafe": 1,
+      "culture_art": 0,
+      "activity_sports": 0,
+      "nature_healing": 0,
+      "craft_experience": 0,
+      "shopping": 0
+    },
+    "atmosphere": {
+      "quiet": 0.4,
+      "romantic": 0.6,
+      "trendy": 0.5,
+      "private": 0.4,
+      "artistic": 0.3,
+      "energetic": 0.6
+    },
+    "experienceType": {
+      "passive_enjoyment": 0.5,
+      "active_participation": 0.1,
+      "social_bonding": 0.8,
+      "relaxation_focused": 0.5
+    },
+    "spaceCharacteristics": {
+      "indoor_ratio": 0.9,
+      "crowdedness_expected": 0.6,
+      "photo_worthiness": 0.4,
+      "scenic_view": 0.1
+    },
+    "contextual": {
+      "time_preference": "evening",
+      "day_preference": [
+        0,
+        0.6,
+        0.6,
+        0.6,
+        0.8,
+        0.9,
+        0.7
+      ],
+      "budget_range": [
+        20000,
+        30000
+      ],
+      "max_travel_distance": 3.0,
+      "average_rating": 4.5,
+      "review_count": 245,
+      "additional_filters": {
+        "weather_suitability": 0.95,
+        "season_suitability": 1.0,
+        "accessibility": {
+          "public_transport": 0.7,
+          "parking_available": 0.5,
+          "wheelchair_accessible": 0.5,
+          "walking_distance": 0.6
+        },
+        "convenience": {
+          "reservation_required": 0.4,
+          "reservation_difficulty": 0.5,
+          "spontaneous_visit": 0.6,
+          "child_friendly": 0.6,
+          "pet_friendly": 0.3
+        }
+      }
+    },
+    "relationshipStageProfile": {
+      "first_date": 0.7,
+      "early_dating": 0.8,
+      "established": 0.8,
+      "long_term": 0.7,
+      "celebration": 0.6
+    }
+  }
+}
