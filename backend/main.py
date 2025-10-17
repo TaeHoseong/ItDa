@@ -22,6 +22,7 @@ class Place(BaseModel):
     rating: float
     price_range: str
     opening_hours: str
+    reviews: str
 
 # DB 세션 의존성
 def get_db():
@@ -62,7 +63,8 @@ def update_place(place_id: str, place: Place, db: Session = Depends(get_db)):
     db_place.longitude=place.longitude,
     db_place.rating=place.rating,
     db_place.price_range=place.price_range
-
+    db_place.reviews = place.reviews
+    
     db.commit()
     db.refresh(db_place)
     return db_place
@@ -79,6 +81,7 @@ def create_place(place: Place, db: Session = Depends(get_db)):
         rating=place.rating,
         price_range=place.price_range,
         opeining_hours=place.opening_hours,
+        reviews =place.reviews
     )
     db.add(db_place)
     db.commit()

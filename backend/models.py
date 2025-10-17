@@ -18,5 +18,5 @@ class PlaceModel(Base):
     price_range = Column(String, nullable=True)          # 가격대
     
     opening_hours = Column(JSON, nullable=True)          # currentOpeningHours.weekdayDescriptions (리스트)
+    reviews = Column(JSON, nullable=True)                # reviews (리스트 저장)
     # photos = Column(JSON, nullable=True)                 # photos (list of dict)
-    # reviews = Column(JSON, nullable=True)                # reviews (리스트 저장)

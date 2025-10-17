@@ -38,6 +38,13 @@ def process_price(price_range):
     elif start_value:
         return f"{symbol}{start_value}"
     return None
+
+def process_review(reviews):
+    processed_reviews = []
+    for r in reviews:
+        review_text = r.get("text", {}).get("text", "")
+        processed_reviews.append(review_text)
+    return processed_reviews
     
 def save_places_google(place_query: str, max_places: int = 60):
     """Google Places API 결과를 DB에 저장"""
@@ -75,8 +82,9 @@ def save_places_google(place_query: str, max_places: int = 60):
             price_range = process_price(p.get("priceRange"))
             opening_hours = p.get("currentOpeningHours", {}).get("weekdayDescriptions")
             # photos = p.get("photos")
-            # reviews = p.get("reviews")
-
+            reviews = process_review(p.get("reviews", []))
+            print("📄 리뷰 샘플:", reviews)
+            print("📄 리뷰 타입:", type(reviews))
             # 중복 검사 (place_id 기준)
             exists = db.query(PlaceModel).filter(PlaceModel.place_id == place_id).first()
             if exists:
@@ -85,7 +93,7 @@ def save_places_google(place_query: str, max_places: int = 60):
                 if isinstance(value, (dict, list)):
                     return json.dumps(value, ensure_ascii=False)
                 return value
-            
+
             db_place = PlaceModel(
                 place_id=place_id,
                 name=name,
@@ -97,7 +105,7 @@ def save_places_google(place_query: str, max_places: int = 60):
                 price_range=price_range,
                 opening_hours=safe_json(opening_hours),
                 # photos=safe_json(photos),
-                # reviews=safe_json(reviews)
+                reviews=json.dumps(reviews, ensure_ascii=False)
             )
 
             db.add(db_place)
