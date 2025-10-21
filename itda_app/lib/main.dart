@@ -95,8 +95,7 @@ class _MainScreenState extends State<MainScreen> {
       const HomeScreen(),
       const MapScreen(),
       PersonaScreen(
-        bubbleText: _currentPersonaSentence,
-        onSpeakTap: _nextPersonaSentence, // tap “말하기…” pill to change
+        initialText: _currentPersonaSentence,
       ),
       const ChatScreen(),
     ];

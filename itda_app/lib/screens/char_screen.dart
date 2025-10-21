@@ -1,117 +1,233 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'dart:async';
 
-class PersonaScreen extends StatelessWidget {
-  const PersonaScreen({super.key, required this.bubbleText, this.onSpeakTap});
+/// PersonaScreen (single stateful page)
+/// ------------------------------------
+/// Shows the original mascot PNG first, then swaps to the scrollable chat
+/// view after the first user message.
+class PersonaScreen extends StatefulWidget {
+  const PersonaScreen({
+    super.key,
+    this.initialText = '안녕! 무엇을 도와줄까? 😊',
+  });
 
-  final String bubbleText;
-  final VoidCallback? onSpeakTap;
+  final String initialText;
+
+  @override
+  State<PersonaScreen> createState() => _PersonaScreenState();
+}
+
+class _PersonaScreenState extends State<PersonaScreen> {
+  final TextEditingController _controller = TextEditingController();
+  final ScrollController _scroll = ScrollController();
+  final List<Map<String, String>> _messages = [];
+  bool _sending = false;
+
+  Future<void> _sendMessage() async {
+    final text = _controller.text.trim();
+    if (text.isEmpty || _sending) return;
+
+    setState(() {
+      _sending = true;
+      _messages.add({'text': text, 'sender': 'user'});
+    });
+
+    _controller.clear();
+    _scrollToBottomSoon();
+
+    try {
+      final reply = await getChatbotResponse(text);
+      if (!mounted) return;
+      setState(() => _messages.add({'text': reply, 'sender': 'bot'}));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _messages.add({
+          'text': '오류가 발생했어요. 잠시 후 다시 시도해 주세요.\n($e)',
+          'sender': 'bot',
+        });
+      });
+    } finally {
+      _scrollToBottomSoon();
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  void _scrollToBottomSoon() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.animateTo(
+          _scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  Future<String> getChatbotResponse(String query) async {
+    await Future.delayed(const Duration(milliseconds: 600));
+    return 'You said: $query';
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    // (optional) remove this if unused to avoid warning
-    // final theme = Theme.of(context);
-    final size = MediaQuery.of(context).size;
-    final bubbleMaxWidth = size.width * 0.82; // responsive max width for bubble
+    final showEmpty = _messages.isEmpty;
 
-    return SafeArea(
-          // Main content
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFAF8F5),
+        body: SafeArea(
           child: Column(
             children: [
-              const SizedBox(height: 8),
-              // _TopBar(),
               const SizedBox(height: 16),
-
-              // Speech bubble
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: bubbleMaxWidth,
-                    ),
-                    child: _SpeechBubble(
-                      text: bubbleText,
-                    ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    child: showEmpty
+                        ? _EmptyState(
+                            key: const ValueKey('empty'),
+                            initialText: widget.initialText,
+                          )
+                        : _ChatList(
+                            key: const ValueKey('chat'),
+                            messages: _messages,
+                            scroll: _scroll,
+                          ),
                   ),
                 ),
               ),
-
-              const Spacer(),
-
-              // Mascot (placeholder circle — replace with your SVG/PNG if available)
-              const _Mascot(),
-
-              const SizedBox(height: 28),
-
-              // Input pill
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: _SpeakPill(
-                  hint: "페르소나에게 말하기 · · ·",
-                  onTap: onSpeakTap,
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  bottom: MediaQuery.of(context).viewInsets.bottom > 0 ? 16 : 32,
+                ),
+                child: _InputPill(
+                  controller: _controller,
+                  hint: '페르소나에게 말하기 · · ·',
+                  sending: _sending,
+                  onSend: _sendMessage,
                 ),
               ),
-
-              const SizedBox(height: 14),
             ],
           ),
-    );
-  }
-}
-
-class _TopBar extends StatelessWidget {
-  const _TopBar();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: Row(
-        children: [
-          const Spacer(),
-          // Hanger icon
-          _IconButtonSvg(
-            assetPath: 'assets/icons/hanger.svg',
-            semanticLabel: 'Wardrobe',
-            onTap: () {},
-          ),
-          const SizedBox(width: 20),
-          // Gear icon
-          _IconButtonSvg(
-            assetPath: 'assets/icons/gear.svg',
-            semanticLabel: 'Settings',
-            onTap: () {},
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _IconButtonSvg extends StatelessWidget {
-  const _IconButtonSvg({
-    required this.assetPath,
-    required this.semanticLabel,
-    this.onTap,
-  });
-
-  final String assetPath;
-  final String semanticLabel;
-  final VoidCallback? onTap;
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({super.key, required this.initialText});
+  final String initialText;
 
   @override
   Widget build(BuildContext context) {
-    return InkResponse(
-      onTap: onTap,
-      radius: 26,
-      child: SvgPicture.asset(
-        assetPath,
-        width: 28,
-        height: 28,
-        colorFilter: const ColorFilter.mode(Colors.black87, BlendMode.srcIn),
-        semanticsLabel: semanticLabel,
+    final size = MediaQuery.of(context).size;
+    final bubbleMaxWidth = size.width * 0.82;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // MODIFIED: Replaced SizedBox(height: 200) with a Spacer
+        const Spacer(flex: 2), // 'flex' allows you to weigh the spacing
+        Align(
+          alignment: Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: bubbleMaxWidth),
+            child: _SpeechBubble(text: initialText),
+          ),
+        ),
+        const Spacer(flex: 1), // Added a Spacer
+        Center(
+          child: Image.asset(
+            'assets/images/mascot.png',
+            width: 200,
+            height: 200,
+            fit: BoxFit.contain,
+          ),
+        ),
+        // MODIFIED: Replaced SizedBox(height: 200) with a Spacer
+        const Spacer(flex: 3), // 'flex' allows you to weigh the spacing
+      ],
+    );
+  }
+}
+
+class _ChatList extends StatelessWidget {
+  const _ChatList({super.key, required this.messages, required this.scroll});
+  final List<Map<String, String>> messages;
+  final ScrollController scroll;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+
+    return ListView.separated(
+      controller: scroll,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.only(top: 8, bottom: 16),
+      itemBuilder: (context, i) {
+        final m = messages[i];
+        final isUser = m['sender'] == 'user';
+        return Align(
+          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: size.width * 0.8),
+            child: _ChatBubble(text: m['text'] ?? '', isUser: isUser),
+          ),
+        );
+      },
+      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      itemCount: messages.length,
+    );
+  }
+}
+
+class _ChatBubble extends StatelessWidget {
+  const _ChatBubble({required this.text, required this.isUser});
+  final String text;
+  final bool isUser;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = isUser ? const Color(0xFFFD9180) : Colors.white;
+    final fg = isUser ? Colors.white : const Color(0xFF1E1E1E);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(22),
+          topRight: const Radius.circular(22),
+          bottomLeft: Radius.circular(isUser ? 22 : 6),
+          bottomRight: Radius.circular(isUser ? 6 : 22),
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Text(text, style: TextStyle(fontSize: 16, height: 1.35, color: fg)),
       ),
     );
   }
@@ -126,27 +242,13 @@ class _SpeechBubble extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // Shadow
-        Container(
-          margin: const EdgeInsets.only(top: 8, left: 4, right: 4),
-          height: 0,
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.18),
-                blurRadius: 18,
-                spreadRadius: -4,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-        ),
-        // Bubble body
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 22),
           decoration: ShapeDecoration(
             color: Colors.white,
-            shape: _BubbleBorder(radius: 28),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(28)),
+            ),
             shadows: const [
               BoxShadow(
                 color: Color(0x1A000000),
@@ -157,38 +259,44 @@ class _SpeechBubble extends StatelessWidget {
           ),
           child: Text(
             text,
-            style: const TextStyle(
-              fontSize: 18,
-              height: 1.4,
-              color: Color(0xFF1E1E1E),
-            ),
+            style: const TextStyle(fontSize: 18, height: 1.4, color: Color(0xFF1E1E1E)),
           ),
         ),
-        // Tail (outside bottom-left)
-        Positioned(
-          left: 40,
-          bottom: -20,
-          child: CustomPaint(
-            size: const Size(36, 28),
-            painter: _TailPainter(color: Colors.white, shadow: false),
-          ),
-        ),
+        const Positioned(left: 40, bottom: -20, child: _TailShadowAndFill()),
       ],
     );
   }
 }
 
-/// Rounded rectangle with a small inward rounding so the custom tail can attach nicely.
-class _BubbleBorder extends RoundedRectangleBorder {
-  _BubbleBorder({required double radius})
-      : super(borderRadius: BorderRadius.all(Radius.circular(radius)));
+class _TailShadowAndFill extends StatelessWidget {
+  const _TailShadowAndFill();
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 36,
+      height: 28,
+      child: Stack(
+        children: const [
+          Positioned(left: 0, top: 2, child: _TailPainterWidget(color: Color(0x1F000000))),
+          _TailPainterWidget(color: Colors.white),
+        ],
+      ),
+    );
+  }
+}
+
+class _TailPainterWidget extends StatelessWidget {
+  const _TailPainterWidget({required this.color});
+  final Color color;
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(size: const Size(36, 28), painter: _TailPainter(color: color));
+  }
 }
 
 class _TailPainter extends CustomPainter {
-  _TailPainter({required this.color, this.shadow = false});
-
+  _TailPainter({required this.color});
   final Color color;
-  final bool shadow;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -198,20 +306,7 @@ class _TailPainter extends CustomPainter {
       ..quadraticBezierTo(size.width * 0.62, size.height * 0.35, size.width * 0.98, size.height * 0.58)
       ..quadraticBezierTo(size.width * 0.62, size.height * 0.70, size.width * 0.22, size.height * 0.98)
       ..close();
-
-    if (shadow) {
-       final blurPaint = Paint()
-        ..color = Colors.black.withOpacity(0.12)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6); // sigma
-      canvas.save();
-      canvas.translate(0, 2); // drop-shadow offset
-      canvas.drawPath(path, blurPaint);
-      canvas.restore();
-    }
-
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
+    final paint = Paint()..color = color..style = PaintingStyle.fill;
     canvas.drawPath(path, paint);
   }
 
@@ -219,147 +314,53 @@ class _TailPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class _Mascot extends StatelessWidget {
-  const _Mascot();
+class _InputPill extends StatelessWidget {
+  const _InputPill({required this.controller, required this.hint, required this.sending, required this.onSend});
 
-  @override
-  Widget build(BuildContext context) {
-    // You can replace this with your SVG: SvgPicture.asset('assets/mascot.svg', width: 180)
-    return Column(
-      children: [
-        Container(
-          width: 190,
-          height: 190,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [Color(0xFFFBEADB), Color(0xFFF1A396)],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x33000000),
-                blurRadius: 10,
-                offset: Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Center(
-            child: Container(
-              width: 128,
-              height: 106,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(64),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x22000000),
-                    blurRadius: 6,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: const [
-                  // Eyes
-                  Positioned(
-                    left: 42,
-                    child: _Dot(size: 6),
-                  ),
-                  Positioned(
-                    right: 42,
-                    child: _Dot(size: 6),
-                  ),
-                  // Nose
-                  Positioned(
-                    bottom: 42,
-                    child: _Nose(),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        // Subtle ground shadow ellipse
-        Container(
-          width: 190,
-          height: 16,
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Dot extends StatelessWidget {
-  const _Dot({required this.size});
-  final double size;
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: const BoxDecoration(
-        color: Colors.black,
-        shape: BoxShape.circle,
-      ),
-    );
-  }
-}
-
-class _Nose extends StatelessWidget {
-  const _Nose();
-  @override
-  Widget build(BuildContext context) {
-    return Transform.rotate(
-      angle: 0.785398, // 45 degrees
-      child: Container(
-        width: 8,
-        height: 8,
-        decoration: const BoxDecoration(
-          color: Color(0xFFFF8A80),
-        ),
-      ),
-    );
-  }
-}
-
-class _SpeakPill extends StatelessWidget {
-  const _SpeakPill({required this.hint, this.onTap});
+  final TextEditingController controller;
   final String hint;
-  final VoidCallback? onTap;
+  final bool sending;
+  final VoidCallback onSend;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        decoration: BoxDecoration(
-          color: const Color(0xFFEDEDED),
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x14000000),
-              blurRadius: 8,
-              offset: Offset(0, 2),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFFEDEDED),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: const [BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, 2))],
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 16),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              minLines: 1,
+              maxLines: 4,
+              textInputAction: TextInputAction.newline,
+              decoration: InputDecoration(hintText: hint, border: InputBorder.none),
+              // MODIFIED: The following line has been removed
+              // onSubmitted: (_) => onSend(), 
             ),
-          ],
-        ),
-        child: Text(
-          hint,
-          style: const TextStyle(
-            color: Color(0xFF6F6A6A),
-            fontSize: 16,
           ),
-        ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: InkWell(
+                onTap: sending ? null : onSend,
+                borderRadius: BorderRadius.circular(24),
+                child: Center(
+                  child: sending
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.4))
+                      : const Icon(Icons.send_rounded, color: Colors.black87),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
