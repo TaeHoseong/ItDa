@@ -1,9 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
 from app.config import settings
 from app.core.database import engine
+from app.core.exceptions import custom_exception_handler
 from app.models import place
+
 
 # DB 테이블 생성
 place.Base.metadata.create_all(bind=engine)
@@ -20,6 +22,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_exception_handler(HTTPException, custom_exception_handler)
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 

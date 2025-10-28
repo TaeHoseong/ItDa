@@ -1,65 +1,270 @@
 from openai import AsyncOpenAI
 from app.config import settings
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-SYSTEM_PROMPT = """당신은 한국어 일정 관리 챗봇 '페르소나'입니다. 😊
+def get_system_prompt():
+    """간결하고 효과적인 시스템 프롬프트"""
+    today = datetime.now()
+    tomorrow = today + timedelta(days=1)
+    day_after = today + timedelta(days=2)
 
-오늘 날짜: {today}
+    return f"""당신은 친근한 한국어 일정 관리 AI 비서입니다.
 
-사용자 메시지를 분석해서 JSON으로 응답하세요:
+오늘: {today.strftime('%Y-%m-%d (%A)')}
+내일: {tomorrow.strftime('%Y-%m-%d (%A)')}
+모레: {day_after.strftime('%Y-%m-%d (%A)')}
 
+## 역할
+사용자의 말을 이해하고 일정을 관리해주세요. 오타나 구어체도 자연스럽게 이해하세요.
+
+## 액션 종류
+1. **general_chat**: 일반 대화 (인사, 감사 등)
+2. **update_info**: 일정 정보 수집 중 (정보 부족)
+3. **create_schedule**: 새 일정 생성 (제목+날짜+시간 모두 있음)
+4. **update_schedule**: 기존 일정 수정/취소
+
+## 정보 추출
+- 날짜: "내일"→{tomorrow.strftime('%Y-%m-%d')}, "모레"→{day_after.strftime('%Y-%m-%d')}
+- 시간: "오후 3시"→15:00, "저녁 7시"→19:00, "3시"→15:00
+- 제목: 회의, 운동, 약속 등 일정 관련 명사
+
+## 응답 형식 (JSON)
 {{
-    "action": "create_schedule|update_info|general_chat",
-    "message": "사용자에게 보여줄 친근한 응답 (이모지 포함)",
-    "extracted_data": {{
-        "title": "일정 제목",
-        "date": "YYYY-MM-DD",
-        "time": "HH:MM"
-    }}
+  "action": "액션명",
+  "message": "사용자에게 보여줄 친근한 메시지",
+  "extracted_data": {{
+    "title": "일정 제목 또는 null",
+    "date": "YYYY-MM-DD 또는 null",
+    "time": "HH:MM 또는 null",
+    "old_value": "수정시 기존값",
+    "new_value": "수정시 새값",
+    "field": "수정 필드(time/date/title)",
+    "action_type": "modify 또는 cancel"
+  }}
 }}
-"""
+
+## 예시
+"일정 만들어줘" → update_info (정보 부족)
+"내일 3시 회의" → create_schedule (정보 충분)
+"7시말고 9시로" → update_schedule (시간 수정)
+"내일 일정 취소" → update_schedule (취소)
+
+유연하게 이해하고, 자연스러운 한국어로 응답하세요."""
 
 async def analyze_intent(message: str, context: dict = None, history: list = None):
-    today = datetime.now().strftime('%Y-%m-%d')
-    system = SYSTEM_PROMPT.format(today=today)
+    """의도 분석 - 개선된 버전"""
 
-    messages = [{"role": "system", "content": system}]
+    system_prompt = get_system_prompt()
 
+    messages = [{"role": "system", "content": system_prompt}]
+
+    # 🔥 대화 히스토리 더 많이 포함 (2턴 → 6턴)
     if history:
-        messages.extend(history[-6:])
+        messages.extend(history[-12:])  # 최근 6턴
 
-    if context:
-        messages.append({
-            "role": "system",
-            "content": f"수집 중인 정보: {json.dumps(context, ensure_ascii=False)}"
-        })
+    # context 정보
+    if context and any(context.values()):
+        context_info = []
+        if context.get("title"):
+            context_info.append(f"제목: {context['title']}")
+        if context.get("date"):
+            context_info.append(f"날짜: {context['date']}")
+        if context.get("time"):
+            context_info.append(f"시간: {context['time']}")
+
+        if context_info:
+            messages.append({
+                "role": "system",
+                "content": f"현재까지 수집된 정보: {', '.join(context_info)}"
+            })
 
     messages.append({"role": "user", "content": message})
+
+    logger.info(f"\n{'='*60}")
+    logger.info(f"📤 입력: {message}")
+    if context:
+        logger.info(f"📋 Context: {context}")
 
     try:
         response = await client.chat.completions.create(
             model=settings.OPENAI_MODEL,
             messages=messages,
-            temperature=0.3,
+            temperature=0.3,  # 🔥 0.1 → 0.3 (더 창의적)
+            max_tokens=500,   # 🔥 300 → 500 (더 긴 응답)
+            response_format={"type": "json_object"}
         )
 
         content = response.choices[0].message.content.strip()
+        logger.info(f"📥 응답: {content[:200]}...")
 
-        # ```json ``` 제거
-        if content.startswith("```"):
-            content = content.split("```")[1]
-            if content.startswith("json"):
-                content = content[4:]
+        result = json.loads(content)
 
-        return json.loads(content.strip())
+        # 기본값 설정
+        if "extracted_data" not in result:
+            result["extracted_data"] = {}
+
+        logger.info(f"✅ 액션: {result.get('action')}")
+        logger.info(f"✅ 추출: {result.get('extracted_data')}")
+        logger.info(f"{'='*60}\n")
+
+        return result
 
     except Exception as e:
-        print(f"OpenAI 오류: {e}")
+        logger.error(f"❌ OpenAI 오류: {e}")
+        return fallback_response(message, context)
+
+def fallback_response(message: str, context: dict = None) -> dict:
+    """폴백 - 더 관대하게"""
+    logger.warning(f"⚠️  폴백 모드")
+
+    normalized = normalize_message(message)
+    message_lower = normalized.lower().strip()
+    extracted = extract_info_simple(normalized, context)
+
+    # 인사
+    if any(w in message_lower for w in ["안녕", "hi", "hello", "하이"]):
         return {
             "action": "general_chat",
-            "message": "죄송해요, 다시 말씀해주세요 🙏",
-            "extracted_data": None
+            "message": "안녕하세요! 😊",
+            "extracted_data": {}
         }
+
+    # 감사
+    if any(w in message_lower for w in ["고마", "감사", "thank"]):
+        return {
+            "action": "general_chat",
+            "message": "천만에요! 😊",
+            "extracted_data": {}
+        }
+
+    # 수정 키워드
+    update_keywords = ["변경", "수정", "바꿔", "말고", "미뤄", "취소", "삭제"]
+    if any(kw in message_lower for kw in update_keywords):
+
+        # "A말고 B" 패턴
+        import re
+        match = re.search(r'(\d+)시.*?말고.*?(\d+)시', message)
+        if match:
+            old_h = int(match.group(1))
+            new_h = int(match.group(2))
+
+            return {
+                "action": "update_schedule",
+                "message": f"{new_h}시로 변경할게요! ✅",
+                "extracted_data": {
+                    **extracted,
+                    "old_value": f"{old_h:02d}:00",
+                    "new_value": f"{new_h:02d}:00",
+                    "field": "time",
+                    "action_type": "modify"
+                }
+            }
+
+        # 취소
+        if any(w in message_lower for w in ["취소", "삭제"]):
+            return {
+                "action": "update_schedule",
+                "message": "일정을 취소할게요!",
+                "extracted_data": {**extracted, "action_type": "cancel"}
+            }
+
+        return {
+            "action": "update_schedule",
+            "message": "어떻게 수정하시겠어요?",
+            "extracted_data": extracted
+        }
+
+    # 일정 관련
+    schedule_kw = ["일정", "약속", "회의", "만들", "추가", "등록"]
+    has_schedule = any(kw in message_lower for kw in schedule_kw)
+    has_context = context and any(context.values())
+    has_datetime = extracted.get("date") or extracted.get("time")
+
+    if has_schedule or has_context or has_datetime or extracted.get("title"):
+        merged = {**(context or {}), **{k: v for k, v in extracted.items() if v}}
+
+        has_all = merged.get("title") and merged.get("date") and merged.get("time")
+
+        if has_all:
+            return {
+                "action": "create_schedule",
+                "message": "일정 만들게요! ✅",
+                "extracted_data": merged
+            }
+
+        # 부족한 것 물어봄
+        if not merged.get("title"):
+            msg = "어떤 일정인가요? 😊"
+        elif not merged.get("date"):
+            msg = "언제로 할까요? 📅"
+        else:
+            msg = "몇 시로 할까요? ⏰"
+
+        return {
+            "action": "update_info",
+            "message": msg,
+            "extracted_data": merged
+        }
+
+    return {
+        "action": "general_chat",
+        "message": "무엇을 도와드릴까요? 😊",
+        "extracted_data": {}
+    }
+
+def normalize_message(message: str) -> str:
+    """오타 보정"""
+    corrections = {
+        "일졍": "일정", "만드러조": "만들어줘", "만들어조": "만들어줘",
+        "추가해조": "추가해줘", "넣어조": "넣어줘"
+    }
+    result = message
+    for typo, correct in corrections.items():
+        result = result.replace(typo, correct)
+    return result
+
+def extract_info_simple(message: str, context: dict = None) -> dict:
+    """패턴 매칭"""
+    result = {**(context or {})}
+
+    # 제목
+    titles = ["회의", "미팅", "약속", "수업", "운동", "식사", "치과", "병원"]
+    for title in titles:
+        if title in message:
+            result["title"] = title
+            break
+
+    if not result.get("title") and any(w in message for w in ["일정", "약속"]):
+        result["title"] = "일정"
+
+    # 날짜
+    today = datetime.now()
+    date_map = {"오늘": 0, "내일": 1, "모레": 2, "글피": 3}
+    for word, days in date_map.items():
+        if word in message:
+            result["date"] = (today + timedelta(days=days)).strftime('%Y-%m-%d')
+            break
+
+    # 시간
+    import re
+    patterns = [
+        (r'오전\s*(\d+)시', lambda h: f"{int(h):02d}:00"),
+        (r'오후\s*(\d+)시', lambda h: f"{int(h)+12 if int(h)<12 else int(h):02d}:00"),
+        (r'저녁\s*(\d+)시', lambda h: f"{int(h)+12 if int(h)<12 else int(h):02d}:00"),
+        (r'(\d+)시', lambda h: f"{int(h):02d}:00" if int(h)<=9 else f"{int(h):02d}:00" if int(h)>=12 else f"{int(h)+12:02d}:00"),
+    ]
+
+    for pattern, converter in patterns:
+        match = re.search(pattern, message)
+        if match:
+            result["time"] = converter(match.group(1))
+            break
+
+    return result
