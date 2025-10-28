@@ -1,9 +1,10 @@
 import os
 import sys
 import urllib.request
+from app.config import settings
 
-client_id = "cHMShowtUkiU38S3qMQ_"
-client_secret = "ljhShXvL6n"
+client_id = NAVER_CLIENT_ID
+client_secret = NAVER_CLIENT_SECRET
 
 def search_place(place: str, num_places: int, start: int):
     input = f"{place} 맛집"

@@ -1,0 +1,43 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+
+# Android
+*.keystore
+local.properties
+
+# iOS
+*.mode1v3
+*.mode2v3
+*.pbxuser
+*.perspectivev3
+**/Pods/
+**/.symlinks/
+**/Flutter/App.framework
+**/Flutter/Flutter.framework
+**/Flutter/ephemeral/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Backend (Python)
+backend/__pycache__/
+backend/*.pyc
+backend/venv/
+backend/.env
+backend/*.db
+backend/*.log
