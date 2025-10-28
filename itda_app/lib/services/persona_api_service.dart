@@ -1,0 +1,47 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'api_config.dart';
+
+class PersonaApiService {
+  final String sessionId;
+
+  PersonaApiService({required this.sessionId});
+
+  /// 챗봇에게 메시지 전송
+  Future<Map<String, dynamic>> sendMessage(String message) async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/persona/chat');
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: jsonEncode({
+          'message': message,
+          'session_id': sessionId,
+        }),
+      ).timeout(ApiConfig.timeout);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(response.bodyBytes));
+        return data;
+      } else {
+        throw Exception('서버 오류: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('네트워크 오류: $e');
+    }
+  }
+
+  /// 세션 초기화
+  Future<void> clearSession() async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/persona/sessions/$sessionId');
+      await http.delete(url).timeout(ApiConfig.timeout);
+      print('🗑️ 세션 초기화 완료');
+    } catch (e) {
+      print('⚠️ 세션 초기화 실패: $e');
+    }
+  }
+}
