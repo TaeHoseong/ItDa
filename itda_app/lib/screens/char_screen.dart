@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
+import '../services/persona_api_service.dart';
 import 'dart:async';
+
 
 /// PersonaScreen (single stateful page)
 /// ------------------------------------
@@ -23,6 +26,20 @@ class _PersonaScreenState extends State<PersonaScreen> {
   final List<Map<String, String>> _messages = [];
   bool _sending = false;
 
+  // API 서비스
+  late final PersonaApiService _apiService;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // 세션 ID 생성
+    final sessionId = const Uuid().v4();
+    _apiService = PersonaApiService(sessionId: sessionId);
+
+    print('세션 ID: $sessionId');
+  }
+
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _sending) return;
@@ -36,21 +53,69 @@ class _PersonaScreenState extends State<PersonaScreen> {
     _scrollToBottomSoon();
 
     try {
-      final reply = await getChatbotResponse(text);
+      // 실제 API 호출
+      print('전송: $text');
+      final response = await _apiService.sendMessage(text);
+
       if (!mounted) return;
-      setState(() => _messages.add({'text': reply, 'sender': 'bot'}));
+
+      final botMessage = response['message'] ?? '응답을 받지 못했어요';
+      print('📥 응답: $botMessage');
+
+      setState(() => _messages.add({'text': botMessage, 'sender': 'bot'}));
+
+      // 일정 생성 성공 시 스낵바
+      if (response['action'] == 'create_schedule' &&
+          response['data']?['schedule'] != null) {
+        final schedule = response['data']['schedule'];
+        _showScheduleCreatedSnackbar(schedule);
+      }
+
     } catch (e) {
+      print('❌ 오류: $e');
       if (!mounted) return;
       setState(() {
         _messages.add({
-          'text': '오류가 발생했어요. 잠시 후 다시 시도해 주세요.\n($e)',
+          'text': '죄송해요, 오류가 발생했어요.\n잠시 후 다시 시도해주세요.',
           'sender': 'bot',
         });
       });
+
+      // 에러 스낵바
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('네트워크 오류: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     } finally {
       _scrollToBottomSoon();
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  // 일정 생성 스낵바
+  void _showScheduleCreatedSnackbar(Map<String, dynamic> schedule) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '✅ 일정 생성: ${schedule['title']}\n'
+              '📅 ${schedule['date']} ${schedule['time'] ?? ''}',
+        ),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 3),
+        action: SnackBarAction(
+          label: '확인',
+          textColor: Colors.white,
+          onPressed: () {},
+        ),
+      ),
+    );
   }
 
   void _scrollToBottomSoon() {
@@ -63,11 +128,6 @@ class _PersonaScreenState extends State<PersonaScreen> {
         );
       }
     });
-  }
-
-  Future<String> getChatbotResponse(String query) async {
-    await Future.delayed(const Duration(milliseconds: 600));
-    return 'You said: $query';
   }
 
   @override
@@ -86,6 +146,32 @@ class _PersonaScreenState extends State<PersonaScreen> {
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
         backgroundColor: const Color(0xFFFAF8F5),
+        // 🔥 AppBar 추가 (세션 초기화 버튼)
+        appBar: AppBar(
+          backgroundColor: const Color(0xFFFAF8F5),
+          elevation: 0,
+          title: const Text('일정 챗봇'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: () async {
+                await _apiService.clearSession();
+                setState(() {
+                  _messages.clear();
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('🔄 새로운 대화를 시작해요!'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              tooltip: '대화 초기화',
+            ),
+          ],
+        ),
         body: SafeArea(
           child: Column(
             children: [
@@ -99,14 +185,14 @@ class _PersonaScreenState extends State<PersonaScreen> {
                     switchOutCurve: Curves.easeIn,
                     child: showEmpty
                         ? _EmptyState(
-                            key: const ValueKey('empty'),
-                            initialText: widget.initialText,
-                          )
+                      key: const ValueKey('empty'),
+                      initialText: widget.initialText,
+                    )
                         : _ChatList(
-                            key: const ValueKey('chat'),
-                            messages: _messages,
-                            scroll: _scroll,
-                          ),
+                      key: const ValueKey('chat'),
+                      messages: _messages,
+                      scroll: _scroll,
+                    ),
                   ),
                 ),
               ),
