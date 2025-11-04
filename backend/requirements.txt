@@ -24,3 +24,6 @@ tqdm==4.66.1
 
 # CORS
 python-multipart==0.0.6
+
+# Machine Learning / Algorithm
+numpy==1.26.2
