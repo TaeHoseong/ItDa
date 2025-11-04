@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:itda_app/main.dart';
 import 'signup_screen.dart';
-import '../survey_screen.dart';
 
 // ▼ 추가: 구글/HTTP/보안 저장소
 import 'package:google_sign_in/google_sign_in.dart';
@@ -48,9 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // ▼ 추가: 구글 로그인 상태 & 유틸
   bool _googleLoading = false;
-  final _google = GoogleSignIn(
-    scopes: ['email', 'profile'], 
-  );
+  final _google = GoogleSignIn(scopes: ['email', 'profile']);
   final _session = _SessionStore();
 
   @override
@@ -65,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text.isNotEmpty) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const SurveyScreen()),
+        MaterialPageRoute(builder: (context) => const MainScreen()),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -81,45 +78,34 @@ class _LoginScreenState extends State<LoginScreen> {
       final account = await _google.signIn();
       if (account == null) throw Exception('로그인이 취소되었습니다.');
 
-      // final auth = await account.authentication;
-      // final idToken = auth.idToken; // 서버에서 검증할 핵심 토큰
-      // if (idToken == null) throw Exception('idToken을 가져오지 못했습니다.');
-      
-      // ScaffoldMessenger.of(context).showSnackBar(
-      //   SnackBar(content: Text('구글 로그인 성공: $idToken')),
-      // );
+      final auth = await account.authentication;
+      final idToken = auth.idToken; // 서버에서 검증할 핵심 토큰
+      if (idToken == null) throw Exception('idToken을 가져오지 못했습니다.');
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const SurveyScreen()),
+      final resp = await http.post(
+        Uri.parse('$_kApiBaseUrl/auth/google'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'id_token': idToken,
+          'client_type': 'flutter-mobile',
+        }),
       );
 
-      // Later connect with backend
-      //
-      // final resp = await http.post(
-      //   Uri.parse('$_kApiBaseUrl/auth/google'),
-      //   headers: {'Content-Type': 'application/json'},
-      //   body: jsonEncode({
-      //     'id_token': idToken,
-      //     'client_type': 'flutter-mobile',
-      //   }),
-      // );
+      if (resp.statusCode != 200) {
+        throw Exception('서버 인증 실패 (${resp.statusCode}) ${resp.body}');
+      }
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      final access = body['access_token'] as String?;
+      final refresh = body['refresh_token'] as String?;
+      if (access == null) throw Exception('access_token 누락');
 
-      // if (resp.statusCode != 200) {
-      //   throw Exception('서버 인증 실패 (${resp.statusCode}) ${resp.body}');
-      // }
-      // final body = jsonDecode(resp.body) as Map<String, dynamic>;
-      // final access = body['access_token'] as String?;
-      // final refresh = body['refresh_token'] as String?;
-      // if (access == null) throw Exception('access_token 누락');
+      await _session.save(access, refresh);
 
-      // await _session.save(access, refresh);
-
-      // if (!mounted) return;
-      // Navigator.pushReplacement(
-      //   context,
-      //   MaterialPageRoute(builder: (_) => const SurveyScreen()),
-      // );
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MainScreen()),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

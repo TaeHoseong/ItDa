@@ -155,7 +155,7 @@ class _PersonaScreenState extends State<PersonaScreen> {
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: () async {
-                // await _apiService.clearSession();
+                await _apiService.clearSession();
                 setState(() {
                   _messages.clear();
                 });
