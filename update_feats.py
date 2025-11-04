@@ -14,13 +14,13 @@ def update_places_features():
     cur = conn.cursor()
     
     # Load places data
-    cur.execute("SELECT name, category, rating, price_range, opening_hours, reviews FROM places")
+    cur.execute("SELECT name, category, rating, price_range, opening_hours, reviews, latitude, longitude FROM places")
     rows = cur.fetchall()
 
     result_list = []
 
     # Update places_features
-    for (name, category, rating, price_range, opening_hours, reviews) in tqdm(rows):
+    for (name, category, rating, price_range, opening_hours, reviews, latitude, longitude) in tqdm(rows):
         opening_hours = json.loads(opening_hours)
         reviews = json.loads(reviews)
         prompt = f"""
@@ -46,6 +46,8 @@ def update_places_features():
         obj = json.loads(result)
         temp_dict = {"name": name,
                      "category": category, 
+                     "latitude": latitude,
+                     "longitude": longitude,
                      "rating": rating,
                      "price_range": price_range,
                      "opening_hours": opening_hours, 
