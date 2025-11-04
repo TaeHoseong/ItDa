@@ -55,7 +55,7 @@ class ItdaApp extends StatelessWidget {
           }),
         ),
       ),
-      home: const MainScreen(),
+      home: const LoginScreen(),
     );
   }
 }
