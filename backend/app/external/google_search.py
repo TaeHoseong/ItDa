@@ -2,7 +2,7 @@ import requests
 import time
 from app.config import settings
 
-API_KEY = GOOGLE_PLACES_API_KEY
+API_KEY = settings.GOOGLE_PLACES_API_KEY
 
 def search_place_google_v1(text_query: str, page_token: str=None):
     url = "https://places.googleapis.com/v1/places:searchText"
