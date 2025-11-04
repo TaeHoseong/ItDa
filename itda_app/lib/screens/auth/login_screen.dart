@@ -2,6 +2,37 @@ import 'package:flutter/material.dart';
 import 'package:itda_app/main.dart';
 import 'signup_screen.dart';
 
+// ▼ 추가: 구글/HTTP/보안 저장소
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+// 환경변수로 API 베이스 주소 주입 (빌드 시 --dart-define 사용)
+const String _kApiBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'https://api.example.com',
+);
+
+// 간단 세션 저장 유틸
+class _SessionStore {
+  static const _kAccess = 'access_token';
+  static const _kRefresh = 'refresh_token';
+  final _storage = const FlutterSecureStorage();
+
+  Future<void> save(String access, String? refresh) async {
+    await _storage.write(key: _kAccess, value: access);
+    if (refresh != null) {
+      await _storage.write(key: _kRefresh, value: refresh);
+    }
+  }
+
+  Future<void> clear() async {
+    await _storage.delete(key: _kAccess);
+    await _storage.delete(key: _kRefresh);
+  }
+}
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -13,6 +44,11 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
+
+  // ▼ 추가: 구글 로그인 상태 & 유틸
+  bool _googleLoading = false;
+  final _google = GoogleSignIn(scopes: ['email', 'profile']);
+  final _session = _SessionStore();
 
   @override
   void dispose() {
@@ -35,8 +71,55 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // ▼ 추가: Route A – Google Sign-In → idToken 서버 전송 → 세션 저장 → 메인 이동
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _googleLoading = true);
+    try {
+      final account = await _google.signIn();
+      if (account == null) throw Exception('로그인이 취소되었습니다.');
+
+      final auth = await account.authentication;
+      final idToken = auth.idToken; // 서버에서 검증할 핵심 토큰
+      if (idToken == null) throw Exception('idToken을 가져오지 못했습니다.');
+
+      final resp = await http.post(
+        Uri.parse('$_kApiBaseUrl/auth/google'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'id_token': idToken,
+          'client_type': 'flutter-mobile',
+        }),
+      );
+
+      if (resp.statusCode != 200) {
+        throw Exception('서버 인증 실패 (${resp.statusCode}) ${resp.body}');
+      }
+      final body = jsonDecode(resp.body) as Map<String, dynamic>;
+      final access = body['access_token'] as String?;
+      final refresh = body['refresh_token'] as String?;
+      if (access == null) throw Exception('access_token 누락');
+
+      await _session.save(access, refresh);
+
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const MainScreen()),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('구글 로그인 실패: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final themePink = const Color(0xFFFF69B4);
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -49,24 +132,24 @@ class _LoginScreenState extends State<LoginScreen> {
               Container(
                 width: 120,
                 height: 120,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFE5EC),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFFE5EC),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.favorite,
                   size: 60,
-                  color: Color(0xFFFF69B4),
+                  color: themePink,
                 ),
               ),
               const SizedBox(height: 24),
 
-              const Text(
+              Text(
                 '잇다',
                 style: TextStyle(
                   fontSize: 36,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFFFF69B4),
+                  color: themePink,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -126,7 +209,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ElevatedButton(
                 onPressed: _login,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF69B4),
+                  backgroundColor: themePink,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -165,14 +248,11 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 24),
 
+              // ▼ 여기 변경: 실제 구글 로그인 호출
               OutlinedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('구글 로그인 기능은 곧 추가될 예정입니다')),
-                  );
-                },
+                onPressed: _googleLoading ? null : _handleGoogleSignIn,
                 icon: const Icon(Icons.g_mobiledata, size: 32),
-                label: const Text('Google로 계속하기'),
+                label: Text(_googleLoading ? '로그인 중…' : 'Google로 계속하기'),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
