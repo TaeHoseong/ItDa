@@ -5,10 +5,15 @@ Phase 2 검증: recommend_place 액션 추가 확인 + 기존 기능 유지 확�
 import sys
 import asyncio
 from pathlib import Path
+from dotenv import load_dotenv
 
 # app 모듈을 import하기 위한 경로 설정
 backend_path = Path(__file__).parent
 sys.path.insert(0, str(backend_path))
+
+# .env 파일 명시적 로드
+env_path = backend_path / ".env"
+load_dotenv(env_path)
 
 from app.services.openai_service import analyze_intent
 
