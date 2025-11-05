@@ -41,3 +41,5 @@ backend/venv/
 backend/.env
 backend/*.db
 backend/*.log
+
+/*.md

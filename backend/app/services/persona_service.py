@@ -2,11 +2,13 @@ from typing import Dict
 from app.schemas.persona import ChatRequest, ChatResponse
 from app.services.openai_service import analyze_intent
 from app.services.schedule_service import ScheduleService
+from app.services.suggest_service import SuggestService
 
 class PersonaService:
     def __init__(self, sessions: Dict):
         self.sessions = sessions
         self.schedule_service = ScheduleService()
+        self.suggest_service = SuggestService()
 
     async def process_message(self, request: ChatRequest) -> ChatResponse:
         """사용자 메시지 처리"""
@@ -20,11 +22,11 @@ class PersonaService:
 
         session = self.sessions[request.session_id]
 
-        print(f"\n{'🔵'*30}")
-        print(f"📨 새 메시지: {request.message}")
-        print(f"📦 세션 ID: {request.session_id}")
-        print(f"📋 기존 pending_data: {session['pending_data']}")
-        print(f"{'🔵'*30}\n")
+        print(f"\n{'='*60}")
+        print(f"[NEW MESSAGE] {request.message}")
+        print(f"[SESSION ID] {request.session_id}")
+        print(f"[PENDING DATA] {session['pending_data']}")
+        print(f"{'='*60}\n")
 
         # 2️⃣ OpenAI에게 의도 분석 (기존 pending_data 전달)
         intent = await analyze_intent(
@@ -39,12 +41,12 @@ class PersonaService:
         # 4️⃣ extracted_data를 pending_data에 병합 (핵심!)
         extracted = intent.get("extracted_data", {})
         if extracted:
-            # 🔥 새로 추출된 정보를 pending_data에 병합
+            # 새로 추출된 정보를 pending_data에 병합
             for key, value in extracted.items():
                 if value:  # None이나 빈 값이 아닌 경우만
                     session["pending_data"][key] = value
 
-            print(f"✅ pending_data 업데이트됨: {session['pending_data']}")
+            print(f"[UPDATED] pending_data: {session['pending_data']}")
 
         # 5️⃣ 액션별 처리
         response_data = None
@@ -61,6 +63,9 @@ class PersonaService:
 
         elif action == "update_schedule":
             response_data = await self._handle_update_schedule(session, intent)
+
+        elif action == "recommend_place":
+            response_data = self._handle_recommend_place(session, intent)
 
         return ChatResponse(
             message=intent["message"],
@@ -80,7 +85,7 @@ class PersonaService:
     def _handle_general_chat(self, session: dict) -> dict:
         """일반 대화 - pending_data 초기화"""
         session["pending_data"] = {}
-        print(f"💬 일반 대화 → pending_data 초기화")
+        print(f"[GENERAL CHAT] pending_data initialized")
 
         return {
             "action_taken": "general_chat"
@@ -90,9 +95,9 @@ class PersonaService:
         """정보 수집 중"""
         missing = self._check_missing_fields(session["pending_data"])
 
-        print(f"📝 정보 수집 중")
-        print(f"   현재 데이터: {session['pending_data']}")
-        print(f"   부족한 필드: {missing}")
+        print(f"[UPDATE INFO] Collecting information")
+        print(f"   Current data: {session['pending_data']}")
+        print(f"   Missing fields: {missing}")
 
         return {
             "action_taken": "update_info",
@@ -106,26 +111,26 @@ class PersonaService:
         # pending_data 사용 (이미 병합됨)
         schedule_data = session["pending_data"].copy()
 
-        print(f"\n📅 일정 생성 시도")
-        print(f"   데이터: {schedule_data}")
+        print(f"\n[CREATE SCHEDULE] Attempting to create schedule")
+        print(f"   Data: {schedule_data}")
 
         # 필수 정보 체크
         is_complete = self._is_complete(schedule_data)
 
         if is_complete:
-            # ✅ 정보 충분 → DB 저장
+            # 정보 충분 → DB 저장
             schedule = await self.schedule_service.create(schedule_data)
             session["pending_data"] = {}  # 초기화
 
-            print(f"✅ 일정 생성 완료!")
+            print(f"[SUCCESS] Schedule created!")
             print(f"   {schedule}\n")
 
             # 메시지 개선
             improved_message = (
-                f"일정이 생성되었습니다! ✅\n\n"
-                f"📌 {schedule['title']}\n"
-                f"📅 {schedule['date']}\n"
-                f"⏰ {schedule['time']}"
+                f"Schedule created successfully!\n\n"
+                f"Title: {schedule['title']}\n"
+                f"Date: {schedule['date']}\n"
+                f"Time: {schedule['time']}"
             )
 
             return {
@@ -134,11 +139,11 @@ class PersonaService:
                 "improved_message": improved_message
             }
         else:
-            # ❌ 정보 부족
+            # 정보 부족
             missing = self._check_missing_fields(schedule_data)
 
-            print(f"❌ 정보 부족")
-            print(f"   부족한 필드: {missing}\n")
+            print(f"[INFO NEEDED] Missing information")
+            print(f"   Missing fields: {missing}\n")
 
             return {
                 "action_taken": "need_more_info",
@@ -152,9 +157,9 @@ class PersonaService:
         extracted = intent.get("extracted_data", {})
         action_type = extracted.get("action_type")
 
-        print(f"\n🔄 일정 수정 시도")
-        print(f"   타입: {action_type}")
-        print(f"   데이터: {extracted}")
+        print(f"\n[UPDATE SCHEDULE] Attempting to update schedule")
+        print(f"   Type: {action_type}")
+        print(f"   Data: {extracted}")
 
         # 수정할 일정 찾기
         schedules = await self.schedule_service.get_all()
@@ -183,13 +188,13 @@ class PersonaService:
         if not target_schedule:
             return {
                 "action_taken": "schedule_not_found",
-                "message": "수정할 일정을 찾을 수 없어요. 어떤 일정을 수정하시겠어요? 🤔"
+                "message": "Cannot find the schedule to modify. Which schedule would you like to update?"
             }
 
         # 취소
         if action_type == "cancel":
             await self.schedule_service.delete(target_schedule["id"])
-            print(f"❌ 일정 삭제됨: {target_schedule['title']}")
+            print(f"[DELETED] Schedule deleted: {target_schedule['title']}")
 
             return {
                 "action_taken": "schedule_cancelled",
@@ -206,19 +211,19 @@ class PersonaService:
                 updates = {field: new_value}
                 updated = await self.schedule_service.update(target_schedule["id"], updates)
 
-                print(f"✅ 일정 수정됨:")
-                print(f"   {target_schedule[field]} → {new_value}")
+                print(f"[MODIFIED] Schedule updated:")
+                print(f"   {target_schedule[field]} -> {new_value}")
 
                 return {
                     "action_taken": "schedule_updated",
                     "old_schedule": target_schedule,
                     "updated_schedule": updated,
-                    "message": f"일정을 수정했어요! ✅"
+                    "message": f"Schedule updated successfully!"
                 }
 
         return {
             "action_taken": "update_failed",
-            "message": "일정 수정에 실패했어요. 다시 시도해주세요."
+            "message": "Failed to update schedule. Please try again."
         }
 
     def _is_complete(self, data: dict) -> bool:
@@ -232,3 +237,27 @@ class PersonaService:
         required = ["title", "date", "time"]
         missing = [field for field in required if not data.get(field)]
         return missing
+
+    def _handle_recommend_place(self, session: dict, intent: dict) -> dict:
+        """장소 추천 처리"""
+
+        print(f"\n{'='*60}")
+        print(f"[RECOMMENDATION START]")
+        print(f"{'='*60}\n")
+
+        # suggest_service를 통해 추천 장소 가져오기
+        places = self.suggest_service.get_recommendations(k=5)
+
+        # 터미널 로깅
+        print(f"\n{'='*60}")
+        print(f"[RECOMMENDATION RESULTS]")
+        print(f"{'='*60}")
+        for idx, place in enumerate(places, 1):
+            print(f"{idx}. {place['name']:<40} | Score: {place['score']:.2f}")
+        print(f"{'='*60}\n")
+
+        return {
+            "action_taken": "place_recommended",
+            "places": places,
+            "count": len(places)
+        }
