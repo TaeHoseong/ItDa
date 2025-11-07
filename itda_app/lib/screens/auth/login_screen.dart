@@ -132,7 +132,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final themePink = const Color(0xFFFF69B4);
+    final themePink = const Color(0xFFFD9180);
 
     return Scaffold(
       body: SafeArea(
@@ -147,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 width: 120,
                 height: 120,
                 decoration: const BoxDecoration(
-                  color: Color(0xFFFFE5EC),
+                  color: Color(0xFFEDEDED),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(

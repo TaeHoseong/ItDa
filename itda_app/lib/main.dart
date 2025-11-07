@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_naver_map/flutter_naver_map.dart';
 
+import 'secrets.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/recommend_screen.dart';
@@ -12,6 +14,21 @@ import 'screens/char_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await FlutterNaverMap().init(
+          clientId: NAVER_MAP_CLIENT_ID,
+          onAuthFailed: (ex) {
+            switch (ex) {
+              case NQuotaExceededException(:final message):
+                print("사용량 초과 (message: $message)");
+                break;
+              case NUnauthorizedClientException() ||
+              NClientUnspecifiedException() ||
+              NAnotherAuthFailedException():
+                print("인증 실패: $ex");
+                break;
+            }
+          });
 
   // Hive 초기화
   await Hive.initFlutter();
@@ -92,11 +109,11 @@ class _MainScreenState extends State<MainScreen> {
   // 3) Build screens with the current dynamic sentence + callback
   List<Widget> _buildScreens() {
     return [
-      const HomeScreen(),
-      const MapScreen(),
       PersonaScreen(
         initialText: _currentPersonaSentence,
       ),
+      const MapScreen(),
+      const HomeScreen(),
       const ChatScreen(),
     ];
   }
@@ -120,9 +137,9 @@ class _MainScreenState extends State<MainScreen> {
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: '달력',
+            icon: Icon(Icons.favorite_border_rounded),
+            selectedIcon: Icon(Icons.favorite_rounded),
+            label: '추천',
           ),
           NavigationDestination
           (
@@ -131,9 +148,9 @@ class _MainScreenState extends State<MainScreen> {
             label: '지도',
           ),
           NavigationDestination(
-            icon: Icon(Icons.favorite_border_rounded),
-            selectedIcon: Icon(Icons.favorite_rounded),
-            label: '추천',
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: '달력',
           ),
           NavigationDestination(
             icon: Icon(Icons.chat_bubble_outline_rounded),

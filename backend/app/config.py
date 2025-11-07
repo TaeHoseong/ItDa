@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
 
     class Config:
-        env_file = "../.env"
+        env_file = "C:/Users/w0106/SWP/ItDa/backend/.env"
 
 @lru_cache()
 def get_settings():

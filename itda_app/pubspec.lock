@@ -102,6 +102,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "5.0.0"
+  flutter_naver_map:
+    dependency: "direct main"
+    description:
+      name: flutter_naver_map
+      sha256: d8ac4d24ed07267949d559b9ba6d7c2e571ffd8ce4b717d0ae63b7f9e0aa623d
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.4.1+1"
   flutter_secure_storage:
     dependency: "direct main"
     description:

@@ -31,7 +31,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pink = const Color(0xFFFF69B4);
+    final pink = const Color(0xFFFD9180);
 
     return Scaffold(
       appBar: AppBar(title: const Text('장소 취향 설문'), centerTitle: true),
@@ -73,16 +73,16 @@ class _SurveyScreenState extends State<SurveyScreen> {
               margin: EdgeInsets.only(right: i == items.length - 1 ? 0 : 6),
               padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
-                color: active ? Colors.pink.shade50 : Colors.grey.shade100,
+                color: active ? Color(0xFFEDEDED) : Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: active ? Colors.pink.shade200 : Colors.grey.shade300),
+                border: Border.all(color: active ? Color(0xFFEDEDED) : Colors.grey.shade300),
               ),
               child: Text(
                 '${i + 1}. ${items[i]}',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                  color: active ? Colors.pink.shade400 : Colors.grey.shade700,
+                  color: active ? Color(0xFFFD9180) : Colors.grey.shade700,
                 ),
               ),
             ),
@@ -317,7 +317,7 @@ class ResultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pink = const Color(0xFFFF69B4);
+    final pink = const Color(0xFFFD9180);
     return Scaffold(
       appBar: AppBar(
         title: const Text('설문 결과'),
