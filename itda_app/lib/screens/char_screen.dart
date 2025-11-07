@@ -62,7 +62,31 @@ class _PersonaScreenState extends State<PersonaScreen> {
       final botMessage = response['message'] ?? '응답을 받지 못했어요';
       print('📥 응답: $botMessage');
 
-      setState(() => _messages.add({'text': botMessage, 'sender': 'bot'}));
+      ///setState(() => _messages.add({'text': botMessage, 'sender': 'bot'}));
+      // 장소 추천인 경우 추천 목록 추가
+      String displayMessage = botMessage;
+      if (response['action'] == 'recommend_place' &&
+          response['data']?['places'] != null) {
+        final places = response['data']['places'] as List<dynamic>;
+
+        if (places.isNotEmpty) {
+          displayMessage += '\n\n📍 추천 장소:\n';
+          for (int i = 0; i < places.length; i++) {
+            final place = places[i];
+            final name = place['name'] ?? '이름 없음';
+            final score = place['score'] ?? 0.0;
+            final address = place['address'] ?? '';
+
+            displayMessage += '\n${i + 1}. $name';
+            if (address.isNotEmpty) {
+              displayMessage += '\n   📌 $address';
+            }
+            displayMessage += '\n   ⭐ 추천도: ${(score * 100).toStringAsFixed(0)}%\n';
+          }
+        }
+      }
+
+      setState(() => _messages.add({'text': displayMessage, 'sender': 'bot'}));
 
       // 일정 생성 성공 시 스낵바
       if (response['action'] == 'create_schedule' &&

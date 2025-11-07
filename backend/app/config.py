@@ -1,4 +1,4 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 
 class Settings(BaseSettings):
@@ -24,7 +24,10 @@ class Settings(BaseSettings):
 
 
     class Config:
-        env_file = "C:/Users/w0106/SWP/ItDa/backend/.env"
+        model_config = SettingsConfigDict(
+            env_file=".env",
+            env_file_encoding='utf-8'
+        )
 
 @lru_cache()
 def get_settings():

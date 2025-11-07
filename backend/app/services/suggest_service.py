@@ -3,6 +3,7 @@
 algorithm.py를 import하여 사용 (수정 없이 재사용)
 """
 import sys
+import sqlite3
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -71,13 +72,37 @@ class SuggestService:
         )
 
         # results는 [(name, score), ...] 형태
-        # 딕셔너리 리스트로 변환
-        formatted_results = [
-            {
-                "name": name,
-                "score": round(float(score), 2)
-            }
-            for name, score in results
-        ]
+        # DB에서 상세 정보를 가져와서 병합
+        formatted_results = []
 
+        # DB 연결
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row  # 딕셔너리 형태로 결과 반환
+        cur = conn.cursor()
+
+        for name, score in results:
+            # 장소 상세 정보 조회
+            cur.execute("""
+                SELECT name, category, address, latitude, longitude,
+                       rating, price_range, opening_hours
+                FROM places
+                WHERE name = ?
+            """, (name,))
+
+            row = cur.fetchone()
+            if row:
+                place_info = {
+                    "name": row["name"],
+                    "score": round(float(score), 2),
+                    "category": row["category"],
+                    "address": row["address"],
+                    "latitude": row["latitude"],
+                    "longitude": row["longitude"],
+                    "rating": row["rating"],
+                    "price_range": row["price_range"],
+                    "opening_hours": row["opening_hours"]
+                }
+                formatted_results.append(place_info)
+
+        conn.close()
         return formatted_results
