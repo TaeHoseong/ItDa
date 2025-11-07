@@ -62,7 +62,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
 
   // ---------- Step header ----------
   Widget _headerStepper() {
-    final items = ['카테고리', '분위기', '경험', '공간'];
+    final items = ['테마', '분위기', '경험', '공간'];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Row(
@@ -150,15 +150,15 @@ class _SurveyScreenState extends State<SurveyScreen> {
   // ---------- Pages ----------
   Widget _pageMainCategory() {
     return _pageScaffold(
-      title: '1) 메인 카테고리 선호도',
-      hint: '별을 눌러 선호도를 선택하세요. (⭐ 1개 = 0.2점, 최대 1.0)',
+      title: '1) 데이트 테마 선호도',
+      hint: '별을 눌러 선호도를 선택하세요',
       children: [
-        _likertTile('카페/음식 (food_cafe)', '☕️', foodCafe, (v) => setState(() => foodCafe = v)),
-        _likertTile('문화/예술 (culture_art)', '🎭', cultureArt, (v) => setState(() => cultureArt = v)),
-        _likertTile('액티비티/스포츠 (activity_sports)', '🏃', activitySports, (v) => setState(() => activitySports = v)),
-        _likertTile('자연/힐링 (nature_healing)', '🌿', natureHealing, (v) => setState(() => natureHealing = v)),
-        _likertTile('공방/체험 (craft_experience)', '🧵', craftExperience, (v) => setState(() => craftExperience = v)),
-        _likertTile('쇼핑 (shopping)', '🛍️', shopping, (v) => setState(() => shopping = v)),
+        _likertTile('카페/음식', '☕️', foodCafe, (v) => setState(() => foodCafe = v)),
+        _likertTile('문화/예술', '🎭', cultureArt, (v) => setState(() => cultureArt = v)),
+        _likertTile('액티비티/스포츠', '🏃', activitySports, (v) => setState(() => activitySports = v)),
+        _likertTile('자연/힐링', '🌿', natureHealing, (v) => setState(() => natureHealing = v)),
+        _likertTile('공방/체험', '🧵', craftExperience, (v) => setState(() => craftExperience = v)),
+        _likertTile('쇼핑', '🛍️', shopping, (v) => setState(() => shopping = v)),
       ],
     );
   }
@@ -166,14 +166,14 @@ class _SurveyScreenState extends State<SurveyScreen> {
   Widget _pageAtmosphere() {
     return _pageScaffold(
       title: '2) 장소 분위기',
-      hint: '끌림 정도를 별로 선택하세요. (0~5개, 0.2점씩, 최대 1.0)',
+      hint: '별을 눌러 선호도를 선택하세요',
       children: [
-        _likertTile('조용하고 담담한 분위기 (quiet)', '🤫', quiet, (v) => setState(() => quiet = v)),
-        _likertTile('로맨틱한 분위기 (romantic)', '💘', romantic, (v) => setState(() => romantic = v)),
-        _likertTile('트렌디/힙한 감성 (trendy)', '🔥', trendy, (v) => setState(() => trendy = v)),
-        _likertTile('프라이빗/아늑함 (private)', '🛋️', privateVibe, (v) => setState(() => privateVibe = v)),
-        _likertTile('예술적/감각적 (artistic)', '🖼️', artistic, (v) => setState(() => artistic = v)),
-        _likertTile('에너지/활기 (energetic)', '⚡️', energetic, (v) => setState(() => energetic = v)),
+        _likertTile('조용한   분위기', '🤫', quiet, (v) => setState(() => quiet = v)),
+        _likertTile('로맨틱한 분위기', '💘', romantic, (v) => setState(() => romantic = v)),
+        _likertTile('트렌디/  힙한 감성', '🔥', trendy, (v) => setState(() => trendy = v)),
+        _likertTile('프라이빗/아늑함', '🛋️', privateVibe, (v) => setState(() => privateVibe = v)),
+        _likertTile('예술적/  감각적', '🖼️', artistic, (v) => setState(() => artistic = v)),
+        _likertTile('에너지/  활기', '⚡️', energetic, (v) => setState(() => energetic = v)),
       ],
     );
   }
@@ -181,15 +181,15 @@ class _SurveyScreenState extends State<SurveyScreen> {
   Widget _pageExperience() {
     return _pageScaffold(
       title: '3) 경험 성격',
-      hint: '선호하는 경험 방식을 선택하세요. (⭐ 1개 = 0.2점)',
+      hint: '별을 눌러 선호도를 선택하세요.',
       children: [
-        _likertTile('감상형/편안히 즐김 (passive_enjoyment)', '🍿', passiveEnjoyment,
+        _likertTile('감상형/  관람 중심', '🍿', passiveEnjoyment,
             (v) => setState(() => passiveEnjoyment = v)),
-        _likertTile('직접 참여/체험 (active_participation)', '🛠️', activeParticipation,
+        _likertTile('직접 참여/체험 중심', '🛠️', activeParticipation,
             (v) => setState(() => activeParticipation = v)),
-        _likertTile('소셜/교류 중심 (social_bonding)', '🧑‍🤝‍🧑', socialBonding,
+        _likertTile('소셜/     교류 중심', '🧑‍🤝‍🧑', socialBonding,
             (v) => setState(() => socialBonding = v)),
-        _likertTile('휴식 중심 (relaxation_focused)', '🧘', relaxationFocused,
+        _likertTile('휴식 중심', '🧘', relaxationFocused,
             (v) => setState(() => relaxationFocused = v)),
       ],
     );
@@ -198,14 +198,14 @@ class _SurveyScreenState extends State<SurveyScreen> {
   Widget _pageSpace() {
     return _pageScaffold(
       title: '4) 공간 특성',
-      hint: '공간에 대한 선호를 별로 표현하세요. (0~5개)',
+      hint: '별을 눌러 선호도를 선택하세요.',
       children: [
-        _likertTile('실내 선호 비율 (indoor_ratio)', '🏠', indoorRatio, (v) => setState(() => indoorRatio = v)),
-        _likertTile('혼잡 예상 허용도 (crowdedness_expected)', '👥', crowdednessExpected,
+        _likertTile('실내 선호', '🏠', indoorRatio, (v) => setState(() => indoorRatio = v)),
+        _likertTile('인구 밀도', '👥', crowdednessExpected,
             (v) => setState(() => crowdednessExpected = v)),
-        _likertTile('사진 스팟 가치 (photo_worthiness)', '📸', photoWorthiness,
+        _likertTile('포토 스팟', '📸', photoWorthiness,
             (v) => setState(() => photoWorthiness = v)),
-        _likertTile('뷰/풍경 선호 (scenic_view)', '🌇', scenicView, (v) => setState(() => scenicView = v)),
+        _likertTile('뷰/풍경', '🌇', scenicView, (v) => setState(() => scenicView = v)),
       ],
     );
   }
