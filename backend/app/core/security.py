@@ -1,9 +1,12 @@
 """
 JWT token generation and verification
+Google OAuth idToken verification
 """
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Dict
 from jose import jwt, JWTError
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 from app.config import settings
 
 
@@ -66,3 +69,46 @@ def verify_token(token: str) -> str:
 
     except JWTError as e:
         raise JWTError(f"Token verification failed: {str(e)}")
+
+
+async def verify_google_token(token: str) -> Dict[str, str]:
+    """
+    Verify Google OAuth idToken and extract user information
+
+    Args:
+        token: Google idToken string from client
+
+    Returns:
+        Dict containing user info with keys:
+        - sub: Google user ID (unique identifier)
+        - email: User's email address
+        - name: User's display name
+        - picture: User's profile picture URL
+
+    Raises:
+        ValueError: If token is invalid or verification fails
+    """
+    try:
+        # Verify the token using Google's public keys
+        idinfo = id_token.verify_oauth2_token(
+            token,
+            google_requests.Request(),
+            settings.GOOGLE_CLIENT_ID
+        )
+
+        # Verify the token was issued by Google
+        if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+            raise ValueError('Wrong issuer')
+
+        # Extract user information
+        user_info = {
+            'sub': idinfo['sub'],              # Google user ID
+            'email': idinfo['email'],          # User email
+            'name': idinfo.get('name', ''),    # Display name (optional)
+            'picture': idinfo.get('picture', '')  # Profile picture URL (optional)
+        }
+
+        return user_info
+
+    except ValueError as e:
+        raise ValueError(f"Invalid Google token: {str(e)}")
