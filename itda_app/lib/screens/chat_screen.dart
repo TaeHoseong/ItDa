@@ -75,12 +75,12 @@ class _ChatScreenState extends State<ChatScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: const Color(0xFFFFE5EC),
+                color: const Color(0xFFEDEDED),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.favorite,
-                color: Color(0xFFFF69B4),
+                color: Color(0xFFFD9180),
                 size: 20,
               ),
             ),
@@ -138,7 +138,7 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.auto_awesome),
-                  color: const Color(0xFFFF69B4),
+                  color: const Color(0xFFFD9180),
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -173,7 +173,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 const SizedBox(width: 8),
                 Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFF69B4),
+                    color: const Color(0xFFFD9180),
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
@@ -201,7 +201,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         decoration: BoxDecoration(
           color: message.isMine
-              ? const Color(0xFFFF69B4)
+              ? const Color(0xFFFD9180)
               : Colors.grey[200],
           borderRadius: BorderRadius.circular(20),
         ),
