@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/persona_message.dart';
 import '../services/persona_api_service.dart';
@@ -56,8 +57,12 @@ class PersonaChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('전송: $text');
-      final response = await _apiService.sendMessage(text);
+      // 저장된 user_id 가져오기 (사용자별 맞춤 추천용)
+      const storage = FlutterSecureStorage();
+      final userId = await storage.read(key: 'user_id');
+
+      debugPrint('전송: $text (userId: $userId)');
+      final response = await _apiService.sendMessage(text, userId: userId);
 
       // 기본 봇 메시지
       String botMessage = response['message'] ?? '응답을 받지 못했어요';
