@@ -14,18 +14,23 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class _SessionStore {
   static const _kAccess = 'access_token';
   static const _kRefresh = 'refresh_token';
+  static const _kUserId = 'user_id';
   final _storage = const FlutterSecureStorage();
 
-  Future<void> save(String access, String? refresh) async {
+  Future<void> save(String access, String? refresh, String? userId) async {
     await _storage.write(key: _kAccess, value: access);
     if (refresh != null) {
       await _storage.write(key: _kRefresh, value: refresh);
+    }
+    if (userId != null) {
+      await _storage.write(key: _kUserId, value: userId);
     }
   }
 
   Future<void> clear() async {
     await _storage.delete(key: _kAccess);
     await _storage.delete(key: _kRefresh);
+    await _storage.delete(key: _kUserId);
   }
 }
 
@@ -97,9 +102,18 @@ class _LoginScreenState extends State<LoginScreen> {
       final body = jsonDecode(resp.body) as Map<String, dynamic>;
       final access = body['access_token'] as String?;
       final refresh = body['refresh_token'] as String?;
+      final user = body['user'] as Map<String, dynamic>?;
+      final userId = user?['user_id'] as String?;
+
       if (access == null) throw Exception('access_token 누락');
 
-      await _session.save(access, refresh);
+      // 🔍 디버그: 토큰 출력
+      print('✅ 로그인 성공!');
+      print('📝 Access Token: $access');
+      print('👤 User ID: $userId');
+      print('📧 Email: ${user?['email']}');
+
+      await _session.save(access, refresh, userId);
 
       if (!mounted) return;
       Navigator.pushReplacement(

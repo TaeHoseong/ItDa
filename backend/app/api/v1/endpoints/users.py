@@ -1,7 +1,8 @@
 """
 User management endpoints
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import verify_token
@@ -11,17 +12,18 @@ from jose import JWTError
 
 
 router = APIRouter()
+security = HTTPBearer()
 
 
 def get_current_user(
-    authorization: str = Header(...),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
     """
     Extract and verify JWT token from Authorization header
 
     Args:
-        authorization: Authorization header (Bearer <token>)
+        credentials: HTTP Bearer credentials from header
         db: Database session
 
     Returns:
@@ -31,14 +33,7 @@ def get_current_user(
         HTTPException 401: If token is invalid or user not found
     """
     try:
-        # Extract token from "Bearer <token>"
-        if not authorization.startswith("Bearer "):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authorization header format"
-            )
-
-        token = authorization[7:]  # Remove "Bearer " prefix
+        token = credentials.credentials
 
         # Verify token and get user_id
         user_id = verify_token(token)
@@ -59,6 +54,27 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Token verification failed: {str(e)}"
         )
+
+
+@router.get("/me", response_model=UserResponse, status_code=status.HTTP_200_OK)
+async def get_current_user_info(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get current user information
+
+    Args:
+        current_user: Authenticated user from JWT
+
+    Returns:
+        UserResponse with user info
+    """
+    return UserResponse(
+        user_id=current_user.user_id,
+        email=current_user.email,
+        name=current_user.name,
+        persona_completed=current_user.persona_completed
+    )
 
 
 @router.put("/persona", response_model=UserResponse, status_code=status.HTTP_200_OK)
