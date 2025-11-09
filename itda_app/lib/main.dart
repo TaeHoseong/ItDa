@@ -56,7 +56,7 @@ void main() async {
           create: (_) => MapProvider(),
         ),
         ChangeNotifierProvider(
-          create: (_) => ScheduleProvider(schedulesBox),
+          create: (_) => ScheduleProvider(),
         ),
         // 다른 Provider 있으면 여기에 추가
       ],
