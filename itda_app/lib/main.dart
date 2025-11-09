@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
+import 'package:intl/date_symbol_data_local.dart';
+
 
 import 'secrets.dart';
 import 'screens/auth/login_screen.dart';
@@ -18,6 +20,8 @@ import 'providers/schedule_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await initializeDateFormatting('ko_KR', null);
 
   await FlutterNaverMap().init(
           clientId: NAVER_MAP_CLIENT_ID,
@@ -39,7 +43,7 @@ void main() async {
 
   // Box 열기 (데이터 저장소)
   await Hive.openBox('bookmarks'); // 찜한 장소
-  await Hive.openBox('schedules');  // 일정
+  final schedulesBox = await Hive.openBox('schedules');
   await Hive.openBox('user');       // 사용자 정보
 
   runApp(
@@ -52,7 +56,7 @@ void main() async {
           create: (_) => MapProvider(),
         ),
         ChangeNotifierProvider(
-          create: (_) => ScheduleProvider(),
+          create: (_) => ScheduleProvider(schedulesBox),
         ),
         // 다른 Provider 있으면 여기에 추가
       ],
@@ -129,7 +133,7 @@ class _MainScreenState extends State<MainScreen> {
         initialText: personaSentences[_personaIdx],
       ),
       const MapScreen(),
-      const HomeScreen(),
+      const CalendarScreen(),
       const ChatScreen(),
     ];
   }
@@ -152,6 +156,7 @@ class _MainScreenState extends State<MainScreen> {
         index: _currentIndex,
         children: _pages,
       ),
+      /*
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
@@ -185,6 +190,75 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ],
       ),
+      */
+      bottomNavigationBar: Container(
+        // Background behind the bar (same as page background)
+        color: const Color(0xFFFAF8F5),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(32),
+              topRight: Radius.circular(32),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x22000000), // soft shadow
+                blurRadius: 20,
+                offset: Offset(0, 0),
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(32),
+              topRight: Radius.circular(32),
+            ),
+            child: NavigationBarTheme(
+              data: const NavigationBarThemeData(
+                backgroundColor: Colors.white,
+                surfaceTintColor: Colors.transparent,
+                indicatorColor: Colors.transparent, // no pill behind icons
+                elevation: 0,
+              ),
+              child: NavigationBar(
+                height: 72,
+                selectedIndex: _currentIndex,
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                onDestinationSelected: (index) {
+                  if (_currentIndex == index && index == 0) {
+                    _nextPersonaSentence();
+                  }
+                  setState(() => _currentIndex = index);
+                },
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.favorite_border_rounded),
+                    selectedIcon: Icon(Icons.favorite_rounded),
+                    label: '추천',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.location_on_outlined),
+                    selectedIcon: Icon(Icons.location_on_rounded),
+                    label: '지도',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home_rounded),
+                    label: '달력',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.chat_bubble_outline_rounded),
+                    selectedIcon: Icon(Icons.chat_bubble_rounded),
+                    label: '채팅',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      )
     );
   }
 }

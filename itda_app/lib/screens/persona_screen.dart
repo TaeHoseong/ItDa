@@ -77,7 +77,6 @@ class _PersonaScreenState extends State<PersonaScreen> {
         appBar: AppBar(
           backgroundColor: const Color(0xFFFAF8F5),
           elevation: 0,
-          title: const Text('일정 챗봇'),
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -138,8 +137,8 @@ class _PersonaScreenState extends State<PersonaScreen> {
                   ),
                   Padding(
                     padding: EdgeInsets.only(
-                      left: 16,
-                      right: 16,
+                      left: 20,
+                      right: 20,
                       bottom: MediaQuery.of(context).viewInsets.bottom > 0
                           ? 16
                           : 32,
@@ -175,7 +174,7 @@ class _EmptyState extends StatelessWidget {
       children: [
         const Spacer(flex: 2),
         Align(
-          alignment: Alignment.centerLeft,
+          alignment: Alignment.center,
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: bubbleMaxWidth),
             child: _SpeechBubble(text: initialText),
@@ -295,13 +294,13 @@ class _SpeechBubble extends StatelessWidget {
           decoration: const ShapeDecoration(
             color: Colors.white,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.all(Radius.circular(28)),
+              borderRadius: BorderRadius.all(Radius.circular(24)),
             ),
             shadows: [
               BoxShadow(
-                color: Color(0x1A000000),
-                blurRadius: 14,
-                offset: Offset(0, 6),
+                color: Color(0x22000000),
+                blurRadius: 4,
+                offset: Offset(0, 4),
               ),
             ],
           ),
@@ -315,8 +314,8 @@ class _SpeechBubble extends StatelessWidget {
           ),
         ),
         const Positioned(
-          left: 40,
-          bottom: -20,
+          left: 30,
+          bottom: -42,
           child: _TailShadowAndFill(),
         ),
       ],
@@ -330,18 +329,25 @@ class _TailShadowAndFill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 36,
-      height: 28,
+      width: 40,
+      height: 44,
       child: Stack(
+        clipBehavior: Clip.none,
         children: const [
+          // Shadow tail (same tone as bubble shadow)
           Positioned(
             left: 0,
-            top: 2,
+            top: 4,
             child: _TailPainterWidget(
-              color: Color(0x1F000000),
+              color: Color(0x22000000),
+              blurSigma: 4, // <- soft shadow
             ),
           ),
-          _TailPainterWidget(color: Colors.white),
+          // Main white tail
+          _TailPainterWidget(
+            color: Colors.white,
+            blurSigma: 0,
+          ),
         ],
       ),
     );
@@ -349,43 +355,46 @@ class _TailShadowAndFill extends StatelessWidget {
 }
 
 class _TailPainterWidget extends StatelessWidget {
-  const _TailPainterWidget({required this.color});
+  const _TailPainterWidget({
+    required this.color,
+    this.blurSigma = 0,
+  });
+
   final Color color;
+  final double blurSigma;
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
-      size: const Size(36, 28),
-      painter: _TailPainter(color: color),
+      size: const Size(40, 44),
+      painter: _TailPainter(
+        color: color,
+        blurSigma: blurSigma,
+      ),
     );
   }
 }
 
 class _TailPainter extends CustomPainter {
-  const _TailPainter({required this.color});
+  const _TailPainter({
+    required this.color,
+    this.blurSigma = 0,
+  });
+
   final Color color;
+  final double blurSigma;
 
   @override
   void paint(Canvas canvas, Size size) {
     final path = Path()
-      ..moveTo(0, size.height * 0.35)
+      ..moveTo(0, 0)
       ..quadraticBezierTo(
-        size.width * 0.40,
-        size.height * 0.25,
-        size.width * 0.55,
-        size.height * 0.02,
+        size.width * 0.15, size.height * 0.7,
+        size.width * 0.7, size.height,
       )
       ..quadraticBezierTo(
-        size.width * 0.62,
-        size.height * 0.35,
-        size.width * 0.98,
-        size.height * 0.58,
-      )
-      ..quadraticBezierTo(
-        size.width * 0.62,
-        size.height * 0.70,
-        size.width * 0.22,
-        size.height * 0.98,
+        size.width * 0.4, size.height * 0.65,
+        size.width, 0,
       )
       ..close();
 
@@ -393,12 +402,19 @@ class _TailPainter extends CustomPainter {
       ..color = color
       ..style = PaintingStyle.fill;
 
+    // blurSigma > 0이면 말풍선 꼬리도 BoxShadow처럼 부드럽게
+    if (blurSigma > 0) {
+      paint.maskFilter = MaskFilter.blur(BlurStyle.normal, blurSigma);
+    }
+
     canvas.drawPath(path, paint);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _TailPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.blurSigma != blurSigma;
 }
+
 
 class _InputPill extends StatelessWidget {
   const _InputPill({
@@ -419,13 +435,6 @@ class _InputPill extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFEDEDED),
         borderRadius: BorderRadius.circular(28),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
       ),
       child: Row(
         children: [
