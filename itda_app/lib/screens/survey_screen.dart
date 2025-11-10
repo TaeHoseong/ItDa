@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:itda_app/main.dart'; // MainScreen 사용
+import '../models/user_persona.dart';
+import '../services/user_api_service.dart';
 
 /// SurveyScreen (4-page wizard + 5-star Likert)
 /// - 4개 섹션(페이지): 1) mainCategory, 2) atmosphere, 3) experienceType, 4) spaceCharacteristics
@@ -214,23 +216,64 @@ class _SurveyScreenState extends State<SurveyScreen> {
   Future<void> _submit() async {
     setState(() => _submitting = true);
 
-    String f(double v) => v.toStringAsFixed(2);
-    final pretty = '''
-places = np.array([[ 
-    ${f(_scoreFromStars(foodCafe))}, ${f(_scoreFromStars(cultureArt))}, ${f(_scoreFromStars(activitySports))}, ${f(_scoreFromStars(natureHealing))}, ${f(_scoreFromStars(craftExperience))}, ${f(_scoreFromStars(shopping))},               # main category
-    ${f(_scoreFromStars(quiet))}, ${f(_scoreFromStars(romantic))}, ${f(_scoreFromStars(trendy))}, ${f(_scoreFromStars(privateVibe))}, ${f(_scoreFromStars(artistic))}, ${f(_scoreFromStars(energetic))},   # atmosphere
-    ${f(_scoreFromStars(passiveEnjoyment))}, ${f(_scoreFromStars(activeParticipation))}, ${f(_scoreFromStars(socialBonding))}, ${f(_scoreFromStars(relaxationFocused))},             # experienceType
-    ${f(_scoreFromStars(indoorRatio))}, ${f(_scoreFromStars(crowdednessExpected))}, ${f(_scoreFromStars(photoWorthiness))}, ${f(_scoreFromStars(scenicView))},            # spaceCharacteristics
+    try {
+      // Create UserPersona object from survey results
+      final persona = UserPersona(
+        foodCafe: _scoreFromStars(foodCafe),
+        cultureArt: _scoreFromStars(cultureArt),
+        activitySports: _scoreFromStars(activitySports),
+        natureHealing: _scoreFromStars(natureHealing),
+        craftExperience: _scoreFromStars(craftExperience),
+        shopping: _scoreFromStars(shopping),
+        quiet: _scoreFromStars(quiet),
+        romantic: _scoreFromStars(romantic),
+        trendy: _scoreFromStars(trendy),
+        privateVibe: _scoreFromStars(privateVibe),
+        artistic: _scoreFromStars(artistic),
+        energetic: _scoreFromStars(energetic),
+        passiveEnjoyment: _scoreFromStars(passiveEnjoyment),
+        activeParticipation: _scoreFromStars(activeParticipation),
+        socialBonding: _scoreFromStars(socialBonding),
+        relaxationFocused: _scoreFromStars(relaxationFocused),
+        indoorRatio: _scoreFromStars(indoorRatio),
+        crowdednessExpected: _scoreFromStars(crowdednessExpected),
+        photoWorthiness: _scoreFromStars(photoWorthiness),
+        scenicView: _scoreFromStars(scenicView),
+      );
+
+      // Send to backend API
+      await UserApiService.updatePersona(persona);
+
+      // Generate pretty format for display
+      String f(double v) => v.toStringAsFixed(2);
+      final pretty = '''
+places = np.array([[
+    ${f(persona.foodCafe)}, ${f(persona.cultureArt)}, ${f(persona.activitySports)}, ${f(persona.natureHealing)}, ${f(persona.craftExperience)}, ${f(persona.shopping)},               # main category
+    ${f(persona.quiet)}, ${f(persona.romantic)}, ${f(persona.trendy)}, ${f(persona.privateVibe)}, ${f(persona.artistic)}, ${f(persona.energetic)},   # atmosphere
+    ${f(persona.passiveEnjoyment)}, ${f(persona.activeParticipation)}, ${f(persona.socialBonding)}, ${f(persona.relaxationFocused)},             # experienceType
+    ${f(persona.indoorRatio)}, ${f(persona.crowdednessExpected)}, ${f(persona.photoWorthiness)}, ${f(persona.scenicView)},            # spaceCharacteristics
 ]])''';
 
-    if (!mounted) return;
-    setState(() => _submitting = false);
+      if (!mounted) return;
+      setState(() => _submitting = false);
 
-    // 풀스크린 결과 페이지로 이동 (현재 설문 페이지 대체)
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => ResultPage(pretty: pretty)),
-    );
+      // 풀스크린 결과 페이지로 이동 (현재 설문 페이지 대체)
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => ResultPage(pretty: pretty)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('설문 제출 실패: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   // ---------- Reusable UI ----------

@@ -3,6 +3,7 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/map_provider.dart';
+import '../providers/schedule_provider.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -13,12 +14,88 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   NaverMapController? _mapController;
+  List<String> _currentMarkerIds = [];
+  bool _isSyncing = false;
+
+  /// 마커를 지도에 추가
+  Future<void> _addMarkersToMap(
+      NaverMapController controller, List<MapMarker> markers) async {
+    for (final m in markers) {
+      final marker = NMarker(
+        id: m.id,
+        position: m.position,
+        caption:
+            m.caption != null ? NOverlayCaption(text: m.caption!) : null,
+      );
+
+      // 마커 클릭 이벤트 핸들러
+      marker.setOnTapListener((overlay) {
+        _onMarkerTap(m);
+      });
+
+      await controller.addOverlay(marker);
+    }
+  }
+
+  /// 마커 클릭 시 호출
+  void _onMarkerTap(MapMarker marker) {
+    // 마커 클릭 처리 로직
+    debugPrint('마커 클릭: ${marker.id}');
+  }
+
+  /// 일정 변경 시 마커 동기화
+  void _syncMarkersIfNeeded(
+      MapProvider mapProvider, ScheduleProvider scheduleProvider) {
+    final controller = _mapController;
+    if (controller == null || _isSyncing) return;
+
+    // Provider의 마커 동기화
+    final eventsWithPlace = scheduleProvider.getEventsWithPlace();
+    debugPrint('일정 개수 (장소 포함): ${eventsWithPlace.length}');
+    for (final event in eventsWithPlace) {
+      debugPrint('  - ${event.placeName}: lat=${event.latitude}, lng=${event.longitude}');
+    }
+
+    mapProvider.syncMarkersWithSchedules(eventsWithPlace);
+
+    final newMarkerIds = mapProvider.markers.map((m) => m.id).toList();
+
+    // 마커 목록이 변경된 경우에만 지도 업데이트
+    if (!_isSameMarkerList(_currentMarkerIds, newMarkerIds)) {
+      _isSyncing = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        // 기존 마커 제거
+        await controller.clearOverlays();
+
+        // 새 마커 추가
+        await _addMarkersToMap(controller, mapProvider.markers);
+
+        _currentMarkerIds = newMarkerIds;
+        _isSyncing = false;
+      });
+    }
+  }
+
+  /// 마커 목록 비교
+  bool _isSameMarkerList(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 
   @override
   Widget build(BuildContext context) {
     final padding = MediaQuery.of(context).padding;
     final size = MediaQuery.of(context).size;
     final mapProvider = context.watch<MapProvider>();
+    final scheduleProvider = context.watch<ScheduleProvider>();
+
+    // 일정이 변경되면 마커 동기화 (postFrameCallback으로 안전하게)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncMarkersIfNeeded(mapProvider, scheduleProvider);
+    });
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -39,16 +116,8 @@ class _MapScreenState extends State<MapScreen> {
               mapProvider.ensureInitialized();
 
               // Provider에 저장된 마커들을 지도에 추가
-              for (final m in mapProvider.markers) {
-                final marker = NMarker(
-                  id: m.id,
-                  position: m.position,
-                  caption: m.caption != null
-                      ? NOverlayCaption(text: m.caption!)
-                      : null,
-                );
-                await controller.addOverlay(marker);
-              }
+              await _addMarkersToMap(controller, mapProvider.markers);
+              _currentMarkerIds = mapProvider.markers.map((m) => m.id).toList();
             },
 
             // 📌 flutter_naver_map 공식 방식: 카메라 이벤트는 위젯 콜백으로 받는다.

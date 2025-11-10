@@ -57,7 +57,7 @@ void main() async {
         ),
         /*
         ChangeNotifierProvider(
-          create: (_) => ScheduleProvider(schedulesBox),
+          create: (_) => ScheduleProvider(),
         ),
         */
         // 다른 Provider 있으면 여기에 추가

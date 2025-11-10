@@ -4,11 +4,12 @@ from app.api.v1.api import api_router
 from app.config import settings
 from app.core.database import engine
 from app.core.exceptions import custom_exception_handler
-from app.models import place
+from app.models import place, user
 
 
 # DB 테이블 생성
 place.Base.metadata.create_all(bind=engine)
+user.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

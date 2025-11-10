@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/persona_message.dart';
 import '../services/persona_api_service.dart';
@@ -11,8 +12,12 @@ class PersonaChatProvider extends ChangeNotifier {
 
   Map<String, dynamic>? _lastScheduleCreated;
 
+  /// 추천받은 장소 목록 저장 (UI에서 접근용)
+  List<Map<String, dynamic>>? _lastRecommendedPlaces;
+
   List<PersonaMessage> get messages => List.unmodifiable(_messages);
   bool get isSending => _isSending;
+  List<Map<String, dynamic>>? get lastRecommendedPlaces => _lastRecommendedPlaces;
 
   /// 일정 생성 응답 (UI에서 SnackBar 띄우고 소비)
   Map<String, dynamic>? takeLastScheduleCreated() {
@@ -56,8 +61,12 @@ class PersonaChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('전송: $text');
-      final response = await _apiService.sendMessage(text);
+      // 저장된 user_id 가져오기 (사용자별 맞춤 추천용)
+      const storage = FlutterSecureStorage();
+      final userId = await storage.read(key: 'user_id');
+
+      debugPrint('전송: $text (userId: $userId)');
+      final response = await _apiService.sendMessage(text, userId: userId);
 
       // 기본 봇 메시지
       String botMessage = response['message'] ?? '응답을 받지 못했어요';
@@ -67,6 +76,9 @@ class PersonaChatProvider extends ChangeNotifier {
           response['data']?['places'] != null) {
         final places = response['data']['places'] as List<dynamic>;
         if (places.isNotEmpty) {
+          // 장소 목록 저장 (UI에서 버튼 표시용)
+          _lastRecommendedPlaces = List<Map<String, dynamic>>.from(places);
+
           final buffer = StringBuffer(botMessage);
           buffer.write('\n\n추천 장소:\n');
 
