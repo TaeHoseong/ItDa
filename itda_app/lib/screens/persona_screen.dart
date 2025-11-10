@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/persona_message.dart';
 import '../providers/persona_chat_provider.dart';
+import '../providers/schedule_provider.dart';
 
 class PersonaScreen extends StatefulWidget {
   const PersonaScreen({
@@ -208,6 +209,7 @@ class _ChatList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final chatProvider = context.watch<PersonaChatProvider>();
 
     return ListView.separated(
       controller: scroll,
@@ -217,16 +219,33 @@ class _ChatList extends StatelessWidget {
       itemBuilder: (context, i) {
         final m = messages[i];
         final isUser = m.sender == PersonaSender.user;
-        return Align(
-          alignment:
-              isUser ? Alignment.centerRight : Alignment.centerLeft,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: size.width * 0.8),
-            child: _ChatBubble(
-              text: m.text,
-              isUser: isUser,
+        final isLastBotMessage = !isUser && i == messages.length - 1;
+        final showPlaceCards = isLastBotMessage &&
+                                chatProvider.lastRecommendedPlaces != null &&
+                                chatProvider.lastRecommendedPlaces!.isNotEmpty;
+
+        return Column(
+          crossAxisAlignment:
+              isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            Align(
+              alignment:
+                  isUser ? Alignment.centerRight : Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: size.width * 0.8),
+                child: _ChatBubble(
+                  text: m.text,
+                  isUser: isUser,
+                ),
+              ),
             ),
-          ),
+            if (showPlaceCards) ...[
+              const SizedBox(height: 12),
+              _PlaceRecommendationCards(
+                places: chatProvider.lastRecommendedPlaces!,
+              ),
+            ],
+          ],
         );
       },
       separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -478,6 +497,169 @@ class _InputPill extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PlaceRecommendationCards extends StatelessWidget {
+  const _PlaceRecommendationCards({required this.places});
+  final List<Map<String, dynamic>> places;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: places.map((place) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 8,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            title: Text(
+              place['name'] ?? '이름 없음',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (place['address'] != null && place['address'] != '')
+                  Text(
+                    place['address'],
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                const SizedBox(height: 4),
+                Text(
+                  '⭐ 추천도: ${((place['score'] ?? 0.0) * 100).toStringAsFixed(0)}%',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFFFF6B6B),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+            trailing: IconButton(
+              icon: const Icon(Icons.add_circle_outline, color: Color(0xFFFF6B6B)),
+              onPressed: () => _showAddScheduleDialog(context, place),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Future<void> _showAddScheduleDialog(
+    BuildContext context,
+    Map<String, dynamic> place,
+  ) async {
+    final scheduleProvider = context.read<ScheduleProvider>();
+    DateTime? selectedDate;
+    TimeOfDay? selectedTime;
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('${place['name']} 일정 추가'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      selectedDate = picked;
+                    });
+                  }
+                },
+                icon: const Icon(Icons.calendar_today),
+                label: Text(
+                  selectedDate == null
+                      ? '날짜 선택'
+                      : '${selectedDate!.year}-${selectedDate!.month}-${selectedDate!.day}',
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final picked = await showTimePicker(
+                    context: context,
+                    initialTime: TimeOfDay.now(),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      selectedTime = picked;
+                    });
+                  }
+                },
+                icon: const Icon(Icons.access_time),
+                label: Text(
+                  selectedTime == null
+                      ? '시간 선택'
+                      : '${selectedTime!.hour}:${selectedTime!.minute.toString().padLeft(2, '0')}',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('취소'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF6B6B),
+              ),
+              onPressed: () {
+                if (selectedDate != null && selectedTime != null) {
+                  scheduleProvider.addEvent(
+                    selectedDate!,
+                    place['name'] ?? '장소',
+                    '${selectedTime!.hour}:${selectedTime!.minute.toString().padLeft(2, '0')}',
+                    placeName: place['name'],
+                    latitude: place['latitude'],
+                    longitude: place['longitude'],
+                    address: place['address'],
+                  );
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('✅ 일정에 추가되었습니다'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
+                    const SnackBar(
+                      content: Text('날짜와 시간을 모두 선택해주세요'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                }
+              },
+              child: const Text('추가'),
+            ),
+          ],
+        ),
       ),
     );
   }
