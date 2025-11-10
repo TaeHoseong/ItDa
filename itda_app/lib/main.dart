@@ -16,6 +16,7 @@ import 'screens/calendar_screen.dart';
 import 'providers/persona_chat_provider.dart';
 import 'providers/map_provider.dart';
 import 'providers/schedule_provider.dart';
+import 'providers/navigation_provider.dart';
 
 
 void main() async {
@@ -43,7 +44,7 @@ void main() async {
 
   // Box 열기 (데이터 저장소)
   await Hive.openBox('bookmarks'); // 찜한 장소
-  final schedulesBox = await Hive.openBox('schedules');
+  await Hive.openBox('schedules');
   await Hive.openBox('user');       // 사용자 정보
 
   runApp(
@@ -57,6 +58,9 @@ void main() async {
         ),
         ChangeNotifierProvider(
           create: (_) => ScheduleProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => NavigationProvider(),
         ),
         // 다른 Provider 있으면 여기에 추가
       ],
@@ -109,8 +113,6 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _currentIndex = 0;
-
   // 초기 문구들
   final List<String> personaSentences = [
     '오늘 하루는 어땠나요?',
@@ -151,46 +153,13 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final navigationProvider = context.watch<NavigationProvider>();
+
     return Scaffold(
       body: IndexedStack(
-        index: _currentIndex,
+        index: navigationProvider.currentIndex,
         children: _pages,
       ),
-      /*
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          // "추천" 탭(0번)을 다시 눌렀을 때만 문구 변경
-          if (_currentIndex == index && index == 0) {
-            _nextPersonaSentence();
-          }
-          setState(() => _currentIndex = index);
-        },
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.favorite_border_rounded),
-            selectedIcon: Icon(Icons.favorite_rounded),
-            label: '추천',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.location_on_outlined),
-            selectedIcon: Icon(Icons.location_on_rounded),
-            label: '지도',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: '달력',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline_rounded),
-            selectedIcon: Icon(Icons.chat_bubble_rounded),
-            label: '채팅',
-          ),
-        ],
-      ),
-      */
       bottomNavigationBar: Container(
         // Background behind the bar (same as page background)
         color: const Color(0xFFFAF8F5),
@@ -224,13 +193,13 @@ class _MainScreenState extends State<MainScreen> {
               ),
               child: NavigationBar(
                 height: 72,
-                selectedIndex: _currentIndex,
+                selectedIndex: navigationProvider.currentIndex,
                 labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
                 onDestinationSelected: (index) {
-                  if (_currentIndex == index && index == 0) {
+                  if (navigationProvider.currentIndex == index && index == 0) {
                     _nextPersonaSentence();
                   }
-                  setState(() => _currentIndex = index);
+                  navigationProvider.setIndex(index);
                 },
                 destinations: const [
                   NavigationDestination(

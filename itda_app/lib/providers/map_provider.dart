@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
+import './schedule_provider.dart';
+
 class MapMarker {
   final String id;
   final NLatLng position;
@@ -50,5 +52,41 @@ class MapProvider extends ChangeNotifier {
     _zoom = position.zoom;
     // 여기서는 굳이 notifyListeners() 안해도 됨
     // (다음 빌드에서 initialCameraPosition에만 사용)
+  }
+
+  /// ScheduleProvider의 일정들로 마커 생성
+  void syncMarkersWithSchedules(List<Schedule> schedules) {
+    // 기존 마커 제거 (초기화용 마커 제외)
+    _markers.removeWhere((m) => m.id != 'city_hall');
+
+    // 장소 정보가 있는 일정만 마커 추가
+    for (final schedule in schedules) {
+      if (schedule.hasPlace) {
+        _markers.add(
+          MapMarker(
+            id: 'schedule_${schedule.date.millisecondsSinceEpoch}_${schedule.time}',
+            position: NLatLng(schedule.latitude!, schedule.longitude!),
+            caption: schedule.placeName,
+          ),
+        );
+      }
+    }
+
+    notifyListeners();
+
+    if (kDebugMode) {
+      print('MapProvider: 마커 동기화 완료 (${_markers.length}개 마커)');
+    }
+  }
+
+  /// 특정 장소로 카메라 이동
+  void moveToPlace(double latitude, double longitude, {double zoom = 15.0}) {
+    _cameraTarget = NLatLng(latitude, longitude);
+    _zoom = zoom;
+    notifyListeners();
+
+    if (kDebugMode) {
+      print('MapProvider: 카메라 이동 ($latitude, $longitude, zoom: $zoom)');
+    }
   }
 }
