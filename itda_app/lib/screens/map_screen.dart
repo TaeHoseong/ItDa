@@ -22,25 +22,37 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
-    // ScheduleProvider의 변경사항을 listen
+    // Provider 리스너 등록
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final scheduleProvider = context.read<ScheduleProvider>();
+      final mapProvider = context.read<MapProvider>();
+
       scheduleProvider.addListener(_onScheduleChanged);
+      mapProvider.addListener(_onMapProviderChanged);
     });
   }
 
   @override
   void dispose() {
     final scheduleProvider = context.read<ScheduleProvider>();
+    final mapProvider = context.read<MapProvider>();
+
     scheduleProvider.removeListener(_onScheduleChanged);
+    mapProvider.removeListener(_onMapProviderChanged);
     super.dispose();
   }
 
-  /// ScheduleProvider 변경 시 호출
+  /// ScheduleProvider 변경 시 호출 (마커 동기화)
   void _onScheduleChanged() {
     final mapProvider = context.read<MapProvider>();
     final scheduleProvider = context.read<ScheduleProvider>();
     _syncMarkersIfNeeded(mapProvider, scheduleProvider);
+  }
+
+  /// MapProvider 변경 시 호출 (카메라 이동)
+  void _onMapProviderChanged() {
+    final mapProvider = context.read<MapProvider>();
+    _moveCameraIfNeeded(mapProvider);
   }
 
   /// 마커를 지도에 추가
@@ -145,11 +157,6 @@ class _MapScreenState extends State<MapScreen> {
     final padding = MediaQuery.of(context).padding;
     final size = MediaQuery.of(context).size;
     final mapProvider = context.read<MapProvider>();
-
-    // MapProvider 카메라 변경 확인 (매 build마다 체크)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _moveCameraIfNeeded(mapProvider);
-    });
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
