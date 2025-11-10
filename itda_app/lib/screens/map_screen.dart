@@ -19,6 +19,42 @@ class _MapScreenState extends State<MapScreen> {
   NLatLng? _lastCameraTarget; // 마지막 카메라 위치 추적
   bool _isProgrammaticMove = false; // 프로그래밍 방식의 이동 여부
 
+  @override
+  void initState() {
+    super.initState();
+    // Provider 리스너 등록
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final scheduleProvider = context.read<ScheduleProvider>();
+      final mapProvider = context.read<MapProvider>();
+
+      scheduleProvider.addListener(_onScheduleChanged);
+      mapProvider.addListener(_onMapProviderChanged);
+    });
+  }
+
+  @override
+  void dispose() {
+    final scheduleProvider = context.read<ScheduleProvider>();
+    final mapProvider = context.read<MapProvider>();
+
+    scheduleProvider.removeListener(_onScheduleChanged);
+    mapProvider.removeListener(_onMapProviderChanged);
+    super.dispose();
+  }
+
+  /// ScheduleProvider 변경 시 호출 (마커 동기화)
+  void _onScheduleChanged() {
+    final mapProvider = context.read<MapProvider>();
+    final scheduleProvider = context.read<ScheduleProvider>();
+    _syncMarkersIfNeeded(mapProvider, scheduleProvider);
+  }
+
+  /// MapProvider 변경 시 호출 (카메라 이동)
+  void _onMapProviderChanged() {
+    final mapProvider = context.read<MapProvider>();
+    _moveCameraIfNeeded(mapProvider);
+  }
+
   /// 마커를 지도에 추가
   Future<void> _addMarkersToMap(
       NaverMapController controller, List<MapMarker> markers) async {
@@ -120,14 +156,7 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     final padding = MediaQuery.of(context).padding;
     final size = MediaQuery.of(context).size;
-    final mapProvider = context.watch<MapProvider>();
-    final scheduleProvider = context.watch<ScheduleProvider>();
-
-    // 일정이 변경되면 마커 동기화 (postFrameCallback으로 안전하게)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _syncMarkersIfNeeded(mapProvider, scheduleProvider);
-      _moveCameraIfNeeded(mapProvider);
-    });
+    final mapProvider = context.read<MapProvider>();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),

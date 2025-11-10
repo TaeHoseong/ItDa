@@ -51,13 +51,17 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
-          create: (_) => PersonaChatProvider(),
+          create: (_) => ScheduleProvider(),
+        ),
+        ChangeNotifierProxyProvider<ScheduleProvider, PersonaChatProvider>(
+          create: (context) => PersonaChatProvider.withScheduleProvider(
+            Provider.of<ScheduleProvider>(context, listen: false),
+          ),
+          update: (context, scheduleProvider, previous) =>
+              previous ?? PersonaChatProvider.withScheduleProvider(scheduleProvider),
         ),
         ChangeNotifierProvider(
           create: (_) => MapProvider(),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => ScheduleProvider(),
         ),
         ChangeNotifierProvider(
           create: (_) => NavigationProvider(),

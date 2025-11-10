@@ -222,9 +222,7 @@ class _ChatList extends StatelessWidget {
         final m = messages[i];
         final isUser = m.sender == PersonaSender.user;
         final isLastBotMessage = !isUser && i == messages.length - 1;
-        final showPlaceCards = isLastBotMessage &&
-                                chatProvider.lastRecommendedPlaces != null &&
-                                chatProvider.lastRecommendedPlaces!.isNotEmpty;
+        final showPlaceCards = isLastBotMessage && chatProvider.shouldShowPlaceCards;
 
         return Column(
           crossAxisAlignment:

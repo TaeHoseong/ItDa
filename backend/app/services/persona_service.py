@@ -66,6 +66,8 @@ class PersonaService:
 
         elif action == "recommend_place":
             response_data = self._handle_recommend_place(session, intent, request.user_id)
+        elif action == "select_place":
+            response_data = await self._handle_select_place(session, intent)
 
         return ChatResponse(
             message=intent["message"],
@@ -249,6 +251,9 @@ class PersonaService:
         # suggest_service를 통해 추천 장소 가져오기 (user_id 전달)
         places = self.suggest_service.get_recommendations(user_id=user_id, k=5)
 
+        # 세션에 추천된 장소 저장 (장소 선택 시 사용)
+        session["recommended_places"] = places
+
         # 터미널 로깅
         print(f"\n{'='*60}")
         print(f"[RECOMMENDATION RESULTS]")
@@ -262,3 +267,99 @@ class PersonaService:
             "places": places,
             "count": len(places)
         }
+
+    async def _handle_select_place(self, session: dict, intent: dict) -> dict:
+        """장소 선택 및 일정에 추가"""
+
+        extracted = intent.get("extracted_data", {})
+        place_index = extracted.get("place_index")  # 1, 2, 3, 4, 5
+        place_name = extracted.get("place_name")  # "스타벅스"
+
+        recommended_places = session.get("recommended_places", [])
+
+        if not recommended_places:
+            return {
+                "action_taken": "no_places_found",
+                "improved_message": "먼저 장소 추천을 받아주세요!"
+            }
+
+        selected_place = None
+
+        # 번호로 선택
+        if place_index:
+            try:
+                idx = int(place_index) - 1
+                if 0 <= idx < len(recommended_places):
+                    selected_place = recommended_places[idx]
+            except:
+                pass
+
+        # 이름으로 선택
+        if not selected_place and place_name:
+            for place in recommended_places:
+                if place_name.lower() in place['name'].lower():
+                    selected_place = place
+                    break
+
+        if not selected_place:
+            return {
+                "action_taken": "place_not_found",
+                "improved_message": "해당 장소를 찾을 수 없어요. 추천 목록을 다시 확인해주세요!"
+            }
+
+        # pending_data에 장소 정보 추가
+        session["pending_data"]["place_name"] = selected_place["name"]
+        session["pending_data"]["latitude"] = selected_place["latitude"]
+        session["pending_data"]["longitude"] = selected_place["longitude"]
+        session["pending_data"]["address"] = selected_place.get("address", "")
+
+        # 날짜/시간 정보도 추출되었다면 병합
+        if extracted.get("title"):
+            session["pending_data"]["title"] = extracted["title"]
+        if extracted.get("date"):
+            session["pending_data"]["date"] = extracted["date"]
+        if extracted.get("time"):
+            session["pending_data"]["time"] = extracted["time"]
+
+        # title이 없으면 장소 이름을 title로 사용
+        if not session["pending_data"].get("title"):
+            session["pending_data"]["title"] = selected_place["name"]
+
+        # 일정 생성 시도
+        schedule_data = session["pending_data"].copy()
+        is_complete = self._is_complete(schedule_data)
+
+        if is_complete:
+            # 정보 충분 → DB 저장
+            schedule = await self.schedule_service.create(schedule_data)
+            session["pending_data"] = {}
+            session["recommended_places"] = []  # 초기화
+
+            improved_message = (
+                f"✅ 일정이 추가되었어요!\n\n"
+                f"장소: {selected_place['name']}\n"
+                f"제목: {schedule['title']}\n"
+                f"날짜: {schedule['date']}\n"
+                f"시간: {schedule['time']}"
+            )
+
+            return {
+                "action_taken": "schedule_created",
+                "schedule": schedule,
+                "improved_message": improved_message
+            }
+        else:
+            # 날짜/시간 정보 필요
+            missing = self._check_missing_fields(schedule_data)
+
+            improved_message = (
+                f"'{selected_place['name']}'을(를) 선택하셨네요! 👍\n"
+                f"언제 방문하실 건가요? (날짜와 시간을 알려주세요)"
+            )
+
+            return {
+                "action_taken": "need_more_info",
+                "pending_data": schedule_data,
+                "missing_fields": missing,
+                "improved_message": improved_message
+            }
