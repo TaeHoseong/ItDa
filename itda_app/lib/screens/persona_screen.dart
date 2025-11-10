@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../models/persona_message.dart';
 import '../providers/persona_chat_provider.dart';
 import '../providers/schedule_provider.dart';
+import '../providers/map_provider.dart';
+import '../providers/navigation_provider.dart';
 
 class PersonaScreen extends StatefulWidget {
   const PersonaScreen({
@@ -631,6 +633,7 @@ class _PlaceRecommendationCards extends StatelessWidget {
               ),
               onPressed: () {
                 if (selectedDate != null && selectedTime != null) {
+                  // 일정 추가
                   scheduleProvider.addEvent(
                     selectedDate!,
                     place['name'] ?? '장소',
@@ -640,6 +643,21 @@ class _PlaceRecommendationCards extends StatelessWidget {
                     longitude: place['longitude'],
                     address: place['address'],
                   );
+
+                  // 지도 화면으로 카메라 이동
+                  if (place['latitude'] != null && place['longitude'] != null) {
+                    final mapProvider = context.read<MapProvider>();
+                    mapProvider.moveToPlace(
+                      place['latitude'] as double,
+                      place['longitude'] as double,
+                      zoom: 16.0,
+                    );
+
+                    // 지도 탭으로 자동 이동
+                    final navigationProvider = context.read<NavigationProvider>();
+                    navigationProvider.navigateToMap();
+                  }
+
                   Navigator.pop(context);
                   ScaffoldMessenger.of(dialogContext).showSnackBar(
                     const SnackBar(

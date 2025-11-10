@@ -16,6 +16,8 @@ class _MapScreenState extends State<MapScreen> {
   NaverMapController? _mapController;
   List<String> _currentMarkerIds = [];
   bool _isSyncing = false;
+  NLatLng? _lastCameraTarget; // 마지막 카메라 위치 추적
+  bool _isProgrammaticMove = false; // 프로그래밍 방식의 이동 여부
 
   /// 마커를 지도에 추가
   Future<void> _addMarkersToMap(
@@ -41,6 +43,35 @@ class _MapScreenState extends State<MapScreen> {
   void _onMarkerTap(MapMarker marker) {
     // 마커 클릭 처리 로직
     debugPrint('마커 클릭: ${marker.id}');
+  }
+
+  /// 카메라 이동 처리
+  void _moveCameraIfNeeded(MapProvider mapProvider) {
+    final controller = _mapController;
+    if (controller == null) return;
+
+    final newTarget = mapProvider.cameraTarget;
+
+    // 카메라 위치가 변경되었는지 확인
+    if (_lastCameraTarget == null ||
+        _lastCameraTarget!.latitude != newTarget.latitude ||
+        _lastCameraTarget!.longitude != newTarget.longitude) {
+      _lastCameraTarget = newTarget;
+
+      // 프로그래밍 방식의 이동임을 표시
+      _isProgrammaticMove = true;
+
+      // 실제로 지도 카메라 이동
+      final cameraUpdate = NCameraUpdate.fromCameraPosition(
+        NCameraPosition(
+          target: newTarget,
+          zoom: mapProvider.zoom,
+        ),
+      );
+      controller.updateCamera(cameraUpdate);
+
+      debugPrint('🗺️ 카메라 이동: ${newTarget.latitude}, ${newTarget.longitude}');
+    }
   }
 
   /// 일정 변경 시 마커 동기화
@@ -95,6 +126,7 @@ class _MapScreenState extends State<MapScreen> {
     // 일정이 변경되면 마커 동기화 (postFrameCallback으로 안전하게)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _syncMarkersIfNeeded(mapProvider, scheduleProvider);
+      _moveCameraIfNeeded(mapProvider);
     });
 
     return Scaffold(
@@ -125,7 +157,13 @@ class _MapScreenState extends State<MapScreen> {
               final c = _mapController;
               if (c == null) return;
 
-              // nowCameraPosition은 현재 카메라 상태를 바로 가져올 수 있는 프로퍼티
+              // 프로그래밍 방식의 이동이면 플래그만 리셋하고 리턴
+              if (_isProgrammaticMove) {
+                _isProgrammaticMove = false;
+                return;
+              }
+
+              // 사용자가 직접 이동한 경우만 Provider 상태 업데이트
               final pos = c.nowCameraPosition;
               mapProvider.updateCamera(pos);
             },
