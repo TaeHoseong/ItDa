@@ -17,9 +17,13 @@ class PersonaChatProvider extends ChangeNotifier {
   /// 추천받은 장소 목록 저장 (UI에서 접근용)
   List<Map<String, dynamic>>? _lastRecommendedPlaces;
 
+  /// 마지막 메시지가 추천 의도였는지 플래그
+  bool _lastMessageWasRecommendation = false;
+
   List<PersonaMessage> get messages => List.unmodifiable(_messages);
   bool get isSending => _isSending;
   List<Map<String, dynamic>>? get lastRecommendedPlaces => _lastRecommendedPlaces;
+  bool get shouldShowPlaceCards => _lastMessageWasRecommendation && _lastRecommendedPlaces != null && _lastRecommendedPlaces!.isNotEmpty;
 
   /// 일정 생성 응답 (UI에서 SnackBar 띄우고 소비)
   Map<String, dynamic>? takeLastScheduleCreated() {
@@ -87,6 +91,7 @@ class PersonaChatProvider extends ChangeNotifier {
         if (places.isNotEmpty) {
           // 장소 목록 저장 (UI에서 버튼 표시용)
           _lastRecommendedPlaces = List<Map<String, dynamic>>.from(places);
+          _lastMessageWasRecommendation = true; // 추천 의도 플래그 설정
 
           final buffer = StringBuffer(botMessage);
           buffer.write('\n\n추천 장소:\n');
@@ -107,6 +112,9 @@ class PersonaChatProvider extends ChangeNotifier {
 
           botMessage = buffer.toString();
         }
+      } else {
+        // 추천이 아닌 다른 액션이면 플래그 초기화
+        _lastMessageWasRecommendation = false;
       }
 
       // 일정 생성 처리 → ScheduleProvider에 추가
@@ -157,6 +165,8 @@ class PersonaChatProvider extends ChangeNotifier {
   void clearChat() {
     _messages.clear();
     _lastScheduleCreated = null;
+    _lastRecommendedPlaces = null;
+    _lastMessageWasRecommendation = false;
     notifyListeners();
   }
 }
