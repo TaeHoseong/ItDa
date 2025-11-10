@@ -42,6 +42,7 @@ dependencies:
   flutter_naver_map: ^1.4.1+1
   table_calendar: ^3.2.0
   intl: ^0.20.2
+  cupertino: ^0.0.1
 
 dev_dependencies:
   flutter_test:
