@@ -19,6 +19,30 @@ class _MapScreenState extends State<MapScreen> {
   NLatLng? _lastCameraTarget; // 마지막 카메라 위치 추적
   bool _isProgrammaticMove = false; // 프로그래밍 방식의 이동 여부
 
+  @override
+  void initState() {
+    super.initState();
+    // ScheduleProvider의 변경사항을 listen
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final scheduleProvider = context.read<ScheduleProvider>();
+      scheduleProvider.addListener(_onScheduleChanged);
+    });
+  }
+
+  @override
+  void dispose() {
+    final scheduleProvider = context.read<ScheduleProvider>();
+    scheduleProvider.removeListener(_onScheduleChanged);
+    super.dispose();
+  }
+
+  /// ScheduleProvider 변경 시 호출
+  void _onScheduleChanged() {
+    final mapProvider = context.read<MapProvider>();
+    final scheduleProvider = context.read<ScheduleProvider>();
+    _syncMarkersIfNeeded(mapProvider, scheduleProvider);
+  }
+
   /// 마커를 지도에 추가
   Future<void> _addMarkersToMap(
       NaverMapController controller, List<MapMarker> markers) async {
@@ -120,12 +144,10 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     final padding = MediaQuery.of(context).padding;
     final size = MediaQuery.of(context).size;
-    final mapProvider = context.watch<MapProvider>();
-    final scheduleProvider = context.watch<ScheduleProvider>();
+    final mapProvider = context.read<MapProvider>();
 
-    // 일정이 변경되면 마커 동기화 (postFrameCallback으로 안전하게)
+    // MapProvider 카메라 변경 확인 (매 build마다 체크)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _syncMarkersIfNeeded(mapProvider, scheduleProvider);
       _moveCameraIfNeeded(mapProvider);
     });
 
