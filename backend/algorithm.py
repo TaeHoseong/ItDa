@@ -26,13 +26,16 @@ def extract_features(place: json, persona):
             list(features["experienceType"].values()) +
             list(features["spaceCharacteristics"].values())
         )
-        rating = features["contextual"]["average_rating"]
+        rating = features["contextual"].get("average_rating", 0)
+        # None 값 처리
+        if rating is None:
+            rating = 0
         # 현재 데이터엔 range 값으로 들어가 있어서 이걸 normalize해줘야함(지금은 임시로 0)
-        price = 0 
+        price = 0
         return np.array(features_array, dtype=float), rating, price
     except KeyError as e:
         print(f"key error | {e} in place: {place.get('name', 'Unknown')}")
-        return np.zeros(20), 0, 0, 0
+        return np.zeros(20), 0, 0
 
 def recommend_topk(db, persona, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4):
     conn = sqlite3.connect(db)
@@ -61,7 +64,7 @@ def recommend_topk(db, persona, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4):
         features, rating, price  = extract_features(scores_json, persona)
         distance = haversine_distance(persona_position, [latitude, longitude])
         similarity_cos = cos_similarity(features, persona)
-        similarity_euclid =1 / np.linalg.norm(features - persona)
+        similarity_euclid =1 / np.linalg.norm(np.abs(features - persona))
         similarity_dot = np.dot(features, persona)
         # print(similarity_euclid, similarity_cos, similarity_dot)
         similarity = similarity_cos

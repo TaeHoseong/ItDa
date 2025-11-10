@@ -10,17 +10,20 @@ def update_places_features():
         base_template = json.load(f)
         
     # Connect to db file
-    conn = sqlite3.connect("backend/test.db")
+    conn = sqlite3.connect("./test.db")
     cur = conn.cursor()
     
     # Load places data
-    cur.execute("SELECT name, category, rating, price_range, opening_hours, reviews, latitude, longitude FROM places")
+    cur.execute("SELECT id, place_id, name, category, rating, price_range, opening_hours, reviews, latitude, longitude, scores FROM places")
     rows = cur.fetchall()
 
-    result_list = []
-
     # Update places_features
-    for (name, category, rating, price_range, opening_hours, reviews, latitude, longitude) in tqdm(rows):
+    pbar = tqdm(rows)
+    for (db_id, place_id, name, category, rating, price_range, opening_hours, reviews, latitude, longitude, scores) in pbar:
+        pbar.set_postfix(name = name)
+        if scores is not None:
+            continue
+       
         opening_hours = json.loads(opening_hours)
         reviews = json.loads(reviews)
         prompt = f"""
@@ -41,24 +44,15 @@ def update_places_features():
         """
         # print(f"used prompt: {prompt}")
         result= ask_GPT(prompt)
-        # print(result)
 
         obj = json.loads(result)
-        temp_dict = {"name": name,
-                     "category": category, 
-                     "latitude": latitude,
-                     "longitude": longitude,
-                     "rating": rating,
-                     "price_range": price_range,
-                     "opening_hours": opening_hours, 
-                     "reviews": reviews,
-                     "result": obj}
-        
-        result_list.append(temp_dict)
+        cur.execute("""
+            UPDATE places
+            SET scores = ?
+            WHERE id = ?
+        """, (json.dumps(obj, ensure_ascii=False), db_id))
 
-    with open("extracted_features.json", "w", encoding="utf-8") as f:
-        json.dump(result_list, f, ensure_ascii=False)
-
-
+        conn.commit()
+    conn.close()
 if __name__ == '__main__':
     update_places_features()

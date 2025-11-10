@@ -1,18 +1,29 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/persona_message.dart';
 import '../services/persona_api_service.dart';
+import 'schedule_provider.dart';
 
 class PersonaChatProvider extends ChangeNotifier {
   final PersonaApiService _apiService;
+  final ScheduleProvider? _scheduleProvider;
   final List<PersonaMessage> _messages = [];
   bool _isSending = false;
 
   Map<String, dynamic>? _lastScheduleCreated;
 
+  /// 추천받은 장소 목록 저장 (UI에서 접근용)
+  List<Map<String, dynamic>>? _lastRecommendedPlaces;
+
+  /// 마지막 메시지가 추천 의도였는지 플래그
+  bool _lastMessageWasRecommendation = false;
+
   List<PersonaMessage> get messages => List.unmodifiable(_messages);
   bool get isSending => _isSending;
+  List<Map<String, dynamic>>? get lastRecommendedPlaces => _lastRecommendedPlaces;
+  bool get shouldShowPlaceCards => _lastMessageWasRecommendation && _lastRecommendedPlaces != null && _lastRecommendedPlaces!.isNotEmpty;
 
   /// 일정 생성 응답 (UI에서 SnackBar 띄우고 소비)
   Map<String, dynamic>? takeLastScheduleCreated() {
@@ -21,13 +32,20 @@ class PersonaChatProvider extends ChangeNotifier {
     return tmp;
   }
 
-  PersonaChatProvider._internal(this._apiService);
+  PersonaChatProvider._internal(this._apiService, this._scheduleProvider);
 
   factory PersonaChatProvider() {
     final sessionId = const Uuid().v4();
     final apiService = PersonaApiService(sessionId: sessionId);
     debugPrint('세션 ID: $sessionId');
-    return PersonaChatProvider._internal(apiService);
+    return PersonaChatProvider._internal(apiService, null);
+  }
+
+  factory PersonaChatProvider.withScheduleProvider(ScheduleProvider scheduleProvider) {
+    final sessionId = const Uuid().v4();
+    final apiService = PersonaApiService(sessionId: sessionId);
+    debugPrint('세션 ID: $sessionId (with ScheduleProvider)');
+    return PersonaChatProvider._internal(apiService, scheduleProvider);
   }
 
   void _addMessage({
@@ -56,8 +74,12 @@ class PersonaChatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('전송: $text');
-      final response = await _apiService.sendMessage(text);
+      // 저장된 user_id 가져오기 (사용자별 맞춤 추천용)
+      const storage = FlutterSecureStorage();
+      final userId = await storage.read(key: 'user_id');
+
+      debugPrint('전송: $text (userId: $userId)');
+      final response = await _apiService.sendMessage(text, userId: userId);
 
       // 기본 봇 메시지
       String botMessage = response['message'] ?? '응답을 받지 못했어요';
@@ -67,6 +89,10 @@ class PersonaChatProvider extends ChangeNotifier {
           response['data']?['places'] != null) {
         final places = response['data']['places'] as List<dynamic>;
         if (places.isNotEmpty) {
+          // 장소 목록 저장 (UI에서 버튼 표시용)
+          _lastRecommendedPlaces = List<Map<String, dynamic>>.from(places);
+          _lastMessageWasRecommendation = true; // 추천 의도 플래그 설정
+
           final buffer = StringBuffer(botMessage);
           buffer.write('\n\n추천 장소:\n');
 
@@ -86,13 +112,39 @@ class PersonaChatProvider extends ChangeNotifier {
 
           botMessage = buffer.toString();
         }
+      } else {
+        // 추천이 아닌 다른 액션이면 플래그 초기화
+        _lastMessageWasRecommendation = false;
       }
 
-      // 일정 생성 처리 (UI에서는 SnackBar로)
+      // 일정 생성 처리 → ScheduleProvider에 추가
       if (response['action'] == 'create_schedule' &&
           response['data']?['schedule'] != null) {
-        _lastScheduleCreated = response['data']['schedule']
-            as Map<String, dynamic>;
+        final schedule = response['data']['schedule'] as Map<String, dynamic>;
+        _lastScheduleCreated = schedule;
+
+        // ScheduleProvider에 일정 추가
+        if (_scheduleProvider != null) {
+          try {
+            // 날짜 파싱 (YYYY-MM-DD 형식 가정)
+            final dateStr = schedule['date'] as String;
+            final dateParts = dateStr.split('-');
+            final date = DateTime(
+              int.parse(dateParts[0]),
+              int.parse(dateParts[1]),
+              int.parse(dateParts[2]),
+            );
+
+            _scheduleProvider!.addEvent(
+              date,
+              schedule['title'] as String,
+              schedule['time'] as String? ?? '',
+            );
+            debugPrint('✅ 일정이 ScheduleProvider에 추가됨');
+          } catch (e) {
+            debugPrint('⚠️ ScheduleProvider 추가 실패: $e');
+          }
+        }
       }
 
       _addMessage(text: botMessage, sender: PersonaSender.bot);
@@ -113,6 +165,8 @@ class PersonaChatProvider extends ChangeNotifier {
   void clearChat() {
     _messages.clear();
     _lastScheduleCreated = null;
+    _lastRecommendedPlaces = null;
+    _lastMessageWasRecommendation = false;
     notifyListeners();
   }
 }
