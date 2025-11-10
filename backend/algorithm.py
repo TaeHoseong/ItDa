@@ -61,7 +61,7 @@ def recommend_topk(db, persona, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4):
         features, rating, price  = extract_features(scores_json, persona)
         distance = haversine_distance(persona_position, [latitude, longitude])
         similarity_cos = cos_similarity(features, persona)
-        similarity_euclid =1 / np.linalg.norm(features - persona)
+        similarity_euclid =1 / np.linalg.norm(np.abs(features - persona))
         similarity_dot = np.dot(features, persona)
         # print(similarity_euclid, similarity_cos, similarity_dot)
         similarity = similarity_cos
