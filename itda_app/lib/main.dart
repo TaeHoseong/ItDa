@@ -44,7 +44,7 @@ void main() async {
 
   // Box 열기 (데이터 저장소)
   await Hive.openBox('bookmarks'); // 찜한 장소
-  final schedulesBox = await Hive.openBox('schedules');
+  await Hive.openBox('schedules');
   await Hive.openBox('user');       // 사용자 정보
 
   runApp(
