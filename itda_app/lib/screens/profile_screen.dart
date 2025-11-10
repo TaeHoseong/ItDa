@@ -24,13 +24,13 @@ class ProfileScreen extends StatelessWidget {
               width: 100,
               height: 100,
               decoration: BoxDecoration(
-                color: const Color(0xFFFFE5EC),
+                color: const Color(0xFFEDEDED),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.favorite,
                 size: 50,
-                color: Color(0xFFFF69B4),
+                color: Color(0xFFFD9180),
               ),
             ),
             const SizedBox(height: 16),
@@ -145,7 +145,7 @@ class ProfileScreen extends StatelessWidget {
             color: const Color(0xFFFFE5EC),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, color: const Color(0xFFFF69B4)),
+          child: Icon(icon, color: const Color(0xFFFD9180)),
         ),
         title: Text(
           title,

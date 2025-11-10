@@ -1,27 +1,68 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_naver_map/flutter_naver_map.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
+
+import 'secrets.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/recommend_screen.dart';
 import 'screens/map_screen.dart';
 import 'screens/chat_screen.dart';
-import 'screens/profile_screen.dart';
-import 'screens/char_screen.dart';
+import 'screens/persona_screen.dart';
+import 'screens/calendar_screen.dart';
+
+import 'providers/persona_chat_provider.dart';
+import 'providers/map_provider.dart';
+import 'providers/schedule_provider.dart';
 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await initializeDateFormatting('ko_KR', null);
+
+  await FlutterNaverMap().init(
+          clientId: NAVER_MAP_CLIENT_ID,
+          onAuthFailed: (ex) {
+            switch (ex) {
+              case NQuotaExceededException(:final message):
+                print("사용량 초과 (message: $message)");
+                break;
+              case NUnauthorizedClientException() ||
+              NClientUnspecifiedException() ||
+              NAnotherAuthFailedException():
+                print("인증 실패: $ex");
+                break;
+            }
+          });
 
   // Hive 초기화
   await Hive.initFlutter();
 
   // Box 열기 (데이터 저장소)
   await Hive.openBox('bookmarks'); // 찜한 장소
-  await Hive.openBox('schedules');  // 일정
+  final schedulesBox = await Hive.openBox('schedules');
   await Hive.openBox('user');       // 사용자 정보
 
-  runApp(const ItdaApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => PersonaChatProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => MapProvider(),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ScheduleProvider(),
+        ),
+        // 다른 Provider 있으면 여기에 추가
+      ],
+      child: const ItdaApp(),
+    ),
+  );
 }
 
 class ItdaApp extends StatelessWidget {
@@ -70,7 +111,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  // 1) Define your persona sentences here
+  // 초기 문구들
   final List<String> personaSentences = [
     '오늘 하루는 어땠나요?',
     '요즘 즐겨 먹는 음식이 있나요?',
@@ -80,39 +121,47 @@ class _MainScreenState extends State<MainScreen> {
 
   int _personaIdx = 0;
 
-  String get _currentPersonaSentence => personaSentences[_personaIdx];
+  late List<Widget> _pages;
 
-  // 2) Cycle to the next sentence
-  void _nextPersonaSentence() {
-    setState(() {
-      _personaIdx = (_personaIdx + 1) % personaSentences.length;
-    });
-  }
+  @override
+  void initState() {
+    super.initState();
 
-  // 3) Build screens with the current dynamic sentence + callback
-  List<Widget> _buildScreens() {
-    return [
-      const HomeScreen(),
-      const MapScreen(),
+    // 처음 한 번만 생성해서 계속 재사용
+    _pages = [
       PersonaScreen(
-        initialText: _currentPersonaSentence,
+        initialText: personaSentences[_personaIdx],
       ),
+      const MapScreen(),
+      const CalendarScreen(),
       const ChatScreen(),
     ];
   }
 
+  void _nextPersonaSentence() {
+    setState(() {
+      _personaIdx = (_personaIdx + 1) % personaSentences.length;
+
+      // 탭 다시 눌렀을 때, 첫 화면 문구만 교체 (채팅 기록은 Provider가 들고 있어서 안 날아감)
+      _pages[0] = PersonaScreen(
+        initialText: personaSentences[_personaIdx],
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final screens = _buildScreens();
-
     return Scaffold(
-      body: screens[_currentIndex],
-      // 4) Material 3 NavigationBar
+      body: IndexedStack(
+        index: _currentIndex,
+        children: _pages,
+      ),
+      /*
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentIndex,
         onDestinationSelected: (index) {
-          // if Persona tab (index 2) is tapped again, cycle sentence
-          if (_currentIndex == index && index == 2) {
+          // "추천" 탭(0번)을 다시 눌렀을 때만 문구 변경
+          if (_currentIndex == index && index == 0) {
             _nextPersonaSentence();
           }
           setState(() => _currentIndex = index);
@@ -120,20 +169,19 @@ class _MainScreenState extends State<MainScreen> {
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: '달력',
+            icon: Icon(Icons.favorite_border_rounded),
+            selectedIcon: Icon(Icons.favorite_rounded),
+            label: '추천',
           ),
-          NavigationDestination
-          (
+          NavigationDestination(
             icon: Icon(Icons.location_on_outlined),
             selectedIcon: Icon(Icons.location_on_rounded),
             label: '지도',
           ),
           NavigationDestination(
-            icon: Icon(Icons.favorite_border_rounded),
-            selectedIcon: Icon(Icons.favorite_rounded),
-            label: '추천',
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home_rounded),
+            label: '달력',
           ),
           NavigationDestination(
             icon: Icon(Icons.chat_bubble_outline_rounded),
@@ -142,6 +190,75 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ],
       ),
+      */
+      bottomNavigationBar: Container(
+        // Background behind the bar (same as page background)
+        color: const Color(0xFFFAF8F5),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(32),
+              topRight: Radius.circular(32),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x22000000), // soft shadow
+                blurRadius: 20,
+                offset: Offset(0, 0),
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(32),
+              topRight: Radius.circular(32),
+            ),
+            child: NavigationBarTheme(
+              data: const NavigationBarThemeData(
+                backgroundColor: Colors.white,
+                surfaceTintColor: Colors.transparent,
+                indicatorColor: Colors.transparent, // no pill behind icons
+                elevation: 0,
+              ),
+              child: NavigationBar(
+                height: 72,
+                selectedIndex: _currentIndex,
+                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                onDestinationSelected: (index) {
+                  if (_currentIndex == index && index == 0) {
+                    _nextPersonaSentence();
+                  }
+                  setState(() => _currentIndex = index);
+                },
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.favorite_border_rounded),
+                    selectedIcon: Icon(Icons.favorite_rounded),
+                    label: '추천',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.location_on_outlined),
+                    selectedIcon: Icon(Icons.location_on_rounded),
+                    label: '지도',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home_rounded),
+                    label: '달력',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.chat_bubble_outline_rounded),
+                    selectedIcon: Icon(Icons.chat_bubble_rounded),
+                    label: '채팅',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      )
     );
   }
 }

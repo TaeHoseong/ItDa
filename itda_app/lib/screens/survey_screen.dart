@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:itda_app/main.dart'; // MainScreen 사용
+import '../models/user_persona.dart';
+import '../services/user_api_service.dart';
 
 /// SurveyScreen (4-page wizard + 5-star Likert)
 /// - 4개 섹션(페이지): 1) mainCategory, 2) atmosphere, 3) experienceType, 4) spaceCharacteristics
@@ -31,7 +33,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pink = const Color(0xFFFF69B4);
+    final pink = const Color(0xFFFD9180);
 
     return Scaffold(
       appBar: AppBar(title: const Text('장소 취향 설문'), centerTitle: true),
@@ -62,7 +64,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
 
   // ---------- Step header ----------
   Widget _headerStepper() {
-    final items = ['카테고리', '분위기', '경험', '공간'];
+    final items = ['테마', '분위기', '경험', '공간'];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Row(
@@ -73,16 +75,16 @@ class _SurveyScreenState extends State<SurveyScreen> {
               margin: EdgeInsets.only(right: i == items.length - 1 ? 0 : 6),
               padding: const EdgeInsets.symmetric(vertical: 10),
               decoration: BoxDecoration(
-                color: active ? Colors.pink.shade50 : Colors.grey.shade100,
+                color: active ? Color(0xFFEDEDED) : Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: active ? Colors.pink.shade200 : Colors.grey.shade300),
+                border: Border.all(color: active ? Color(0xFFEDEDED) : Colors.grey.shade300),
               ),
               child: Text(
                 '${i + 1}. ${items[i]}',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                  color: active ? Colors.pink.shade400 : Colors.grey.shade700,
+                  color: active ? Color(0xFFFD9180) : Colors.grey.shade700,
                 ),
               ),
             ),
@@ -150,15 +152,15 @@ class _SurveyScreenState extends State<SurveyScreen> {
   // ---------- Pages ----------
   Widget _pageMainCategory() {
     return _pageScaffold(
-      title: '1) 메인 카테고리 선호도',
-      hint: '별을 눌러 선호도를 선택하세요. (⭐ 1개 = 0.2점, 최대 1.0)',
+      title: '1) 데이트 테마 선호도',
+      hint: '별을 눌러 선호도를 선택하세요',
       children: [
-        _likertTile('카페/음식 (food_cafe)', '☕️', foodCafe, (v) => setState(() => foodCafe = v)),
-        _likertTile('문화/예술 (culture_art)', '🎭', cultureArt, (v) => setState(() => cultureArt = v)),
-        _likertTile('액티비티/스포츠 (activity_sports)', '🏃', activitySports, (v) => setState(() => activitySports = v)),
-        _likertTile('자연/힐링 (nature_healing)', '🌿', natureHealing, (v) => setState(() => natureHealing = v)),
-        _likertTile('공방/체험 (craft_experience)', '🧵', craftExperience, (v) => setState(() => craftExperience = v)),
-        _likertTile('쇼핑 (shopping)', '🛍️', shopping, (v) => setState(() => shopping = v)),
+        _likertTile('카페/음식', '☕️', foodCafe, (v) => setState(() => foodCafe = v)),
+        _likertTile('문화/예술', '🎭', cultureArt, (v) => setState(() => cultureArt = v)),
+        _likertTile('액티비티/스포츠', '🏃', activitySports, (v) => setState(() => activitySports = v)),
+        _likertTile('자연/힐링', '🌿', natureHealing, (v) => setState(() => natureHealing = v)),
+        _likertTile('공방/체험', '🧵', craftExperience, (v) => setState(() => craftExperience = v)),
+        _likertTile('쇼핑', '🛍️', shopping, (v) => setState(() => shopping = v)),
       ],
     );
   }
@@ -166,14 +168,14 @@ class _SurveyScreenState extends State<SurveyScreen> {
   Widget _pageAtmosphere() {
     return _pageScaffold(
       title: '2) 장소 분위기',
-      hint: '끌림 정도를 별로 선택하세요. (0~5개, 0.2점씩, 최대 1.0)',
+      hint: '별을 눌러 선호도를 선택하세요',
       children: [
-        _likertTile('조용하고 담담한 분위기 (quiet)', '🤫', quiet, (v) => setState(() => quiet = v)),
-        _likertTile('로맨틱한 분위기 (romantic)', '💘', romantic, (v) => setState(() => romantic = v)),
-        _likertTile('트렌디/힙한 감성 (trendy)', '🔥', trendy, (v) => setState(() => trendy = v)),
-        _likertTile('프라이빗/아늑함 (private)', '🛋️', privateVibe, (v) => setState(() => privateVibe = v)),
-        _likertTile('예술적/감각적 (artistic)', '🖼️', artistic, (v) => setState(() => artistic = v)),
-        _likertTile('에너지/활기 (energetic)', '⚡️', energetic, (v) => setState(() => energetic = v)),
+        _likertTile('조용한   분위기', '🤫', quiet, (v) => setState(() => quiet = v)),
+        _likertTile('로맨틱한 분위기', '💘', romantic, (v) => setState(() => romantic = v)),
+        _likertTile('트렌디/  힙한 감성', '🔥', trendy, (v) => setState(() => trendy = v)),
+        _likertTile('프라이빗/아늑함', '🛋️', privateVibe, (v) => setState(() => privateVibe = v)),
+        _likertTile('예술적/  감각적', '🖼️', artistic, (v) => setState(() => artistic = v)),
+        _likertTile('에너지/  활기', '⚡️', energetic, (v) => setState(() => energetic = v)),
       ],
     );
   }
@@ -181,15 +183,15 @@ class _SurveyScreenState extends State<SurveyScreen> {
   Widget _pageExperience() {
     return _pageScaffold(
       title: '3) 경험 성격',
-      hint: '선호하는 경험 방식을 선택하세요. (⭐ 1개 = 0.2점)',
+      hint: '별을 눌러 선호도를 선택하세요.',
       children: [
-        _likertTile('감상형/편안히 즐김 (passive_enjoyment)', '🍿', passiveEnjoyment,
+        _likertTile('감상형/  관람 중심', '🍿', passiveEnjoyment,
             (v) => setState(() => passiveEnjoyment = v)),
-        _likertTile('직접 참여/체험 (active_participation)', '🛠️', activeParticipation,
+        _likertTile('직접 참여/체험 중심', '🛠️', activeParticipation,
             (v) => setState(() => activeParticipation = v)),
-        _likertTile('소셜/교류 중심 (social_bonding)', '🧑‍🤝‍🧑', socialBonding,
+        _likertTile('소셜/     교류 중심', '🧑‍🤝‍🧑', socialBonding,
             (v) => setState(() => socialBonding = v)),
-        _likertTile('휴식 중심 (relaxation_focused)', '🧘', relaxationFocused,
+        _likertTile('휴식 중심', '🧘', relaxationFocused,
             (v) => setState(() => relaxationFocused = v)),
       ],
     );
@@ -198,14 +200,14 @@ class _SurveyScreenState extends State<SurveyScreen> {
   Widget _pageSpace() {
     return _pageScaffold(
       title: '4) 공간 특성',
-      hint: '공간에 대한 선호를 별로 표현하세요. (0~5개)',
+      hint: '별을 눌러 선호도를 선택하세요.',
       children: [
-        _likertTile('실내 선호 비율 (indoor_ratio)', '🏠', indoorRatio, (v) => setState(() => indoorRatio = v)),
-        _likertTile('혼잡 예상 허용도 (crowdedness_expected)', '👥', crowdednessExpected,
+        _likertTile('실내 선호', '🏠', indoorRatio, (v) => setState(() => indoorRatio = v)),
+        _likertTile('인구 밀도', '👥', crowdednessExpected,
             (v) => setState(() => crowdednessExpected = v)),
-        _likertTile('사진 스팟 가치 (photo_worthiness)', '📸', photoWorthiness,
+        _likertTile('포토 스팟', '📸', photoWorthiness,
             (v) => setState(() => photoWorthiness = v)),
-        _likertTile('뷰/풍경 선호 (scenic_view)', '🌇', scenicView, (v) => setState(() => scenicView = v)),
+        _likertTile('뷰/풍경', '🌇', scenicView, (v) => setState(() => scenicView = v)),
       ],
     );
   }
@@ -214,23 +216,64 @@ class _SurveyScreenState extends State<SurveyScreen> {
   Future<void> _submit() async {
     setState(() => _submitting = true);
 
-    String f(double v) => v.toStringAsFixed(2);
-    final pretty = '''
-places = np.array([[ 
-    ${f(_scoreFromStars(foodCafe))}, ${f(_scoreFromStars(cultureArt))}, ${f(_scoreFromStars(activitySports))}, ${f(_scoreFromStars(natureHealing))}, ${f(_scoreFromStars(craftExperience))}, ${f(_scoreFromStars(shopping))},               # main category
-    ${f(_scoreFromStars(quiet))}, ${f(_scoreFromStars(romantic))}, ${f(_scoreFromStars(trendy))}, ${f(_scoreFromStars(privateVibe))}, ${f(_scoreFromStars(artistic))}, ${f(_scoreFromStars(energetic))},   # atmosphere
-    ${f(_scoreFromStars(passiveEnjoyment))}, ${f(_scoreFromStars(activeParticipation))}, ${f(_scoreFromStars(socialBonding))}, ${f(_scoreFromStars(relaxationFocused))},             # experienceType
-    ${f(_scoreFromStars(indoorRatio))}, ${f(_scoreFromStars(crowdednessExpected))}, ${f(_scoreFromStars(photoWorthiness))}, ${f(_scoreFromStars(scenicView))},            # spaceCharacteristics
+    try {
+      // Create UserPersona object from survey results
+      final persona = UserPersona(
+        foodCafe: _scoreFromStars(foodCafe),
+        cultureArt: _scoreFromStars(cultureArt),
+        activitySports: _scoreFromStars(activitySports),
+        natureHealing: _scoreFromStars(natureHealing),
+        craftExperience: _scoreFromStars(craftExperience),
+        shopping: _scoreFromStars(shopping),
+        quiet: _scoreFromStars(quiet),
+        romantic: _scoreFromStars(romantic),
+        trendy: _scoreFromStars(trendy),
+        privateVibe: _scoreFromStars(privateVibe),
+        artistic: _scoreFromStars(artistic),
+        energetic: _scoreFromStars(energetic),
+        passiveEnjoyment: _scoreFromStars(passiveEnjoyment),
+        activeParticipation: _scoreFromStars(activeParticipation),
+        socialBonding: _scoreFromStars(socialBonding),
+        relaxationFocused: _scoreFromStars(relaxationFocused),
+        indoorRatio: _scoreFromStars(indoorRatio),
+        crowdednessExpected: _scoreFromStars(crowdednessExpected),
+        photoWorthiness: _scoreFromStars(photoWorthiness),
+        scenicView: _scoreFromStars(scenicView),
+      );
+
+      // Send to backend API
+      await UserApiService.updatePersona(persona);
+
+      // Generate pretty format for display
+      String f(double v) => v.toStringAsFixed(2);
+      final pretty = '''
+places = np.array([[
+    ${f(persona.foodCafe)}, ${f(persona.cultureArt)}, ${f(persona.activitySports)}, ${f(persona.natureHealing)}, ${f(persona.craftExperience)}, ${f(persona.shopping)},               # main category
+    ${f(persona.quiet)}, ${f(persona.romantic)}, ${f(persona.trendy)}, ${f(persona.privateVibe)}, ${f(persona.artistic)}, ${f(persona.energetic)},   # atmosphere
+    ${f(persona.passiveEnjoyment)}, ${f(persona.activeParticipation)}, ${f(persona.socialBonding)}, ${f(persona.relaxationFocused)},             # experienceType
+    ${f(persona.indoorRatio)}, ${f(persona.crowdednessExpected)}, ${f(persona.photoWorthiness)}, ${f(persona.scenicView)},            # spaceCharacteristics
 ]])''';
 
-    if (!mounted) return;
-    setState(() => _submitting = false);
+      if (!mounted) return;
+      setState(() => _submitting = false);
 
-    // 풀스크린 결과 페이지로 이동 (현재 설문 페이지 대체)
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (_) => ResultPage(pretty: pretty)),
-    );
+      // 풀스크린 결과 페이지로 이동 (현재 설문 페이지 대체)
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => ResultPage(pretty: pretty)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('설문 제출 실패: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   // ---------- Reusable UI ----------
@@ -317,7 +360,7 @@ class ResultPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pink = const Color(0xFFFF69B4);
+    final pink = const Color(0xFFFD9180);
     return Scaffold(
       appBar: AppBar(
         title: const Text('설문 결과'),

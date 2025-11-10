@@ -65,7 +65,7 @@ class PersonaService:
             response_data = await self._handle_update_schedule(session, intent)
 
         elif action == "recommend_place":
-            response_data = self._handle_recommend_place(session, intent)
+            response_data = self._handle_recommend_place(session, intent, request.user_id)
 
         return ChatResponse(
             message=intent["message"],
@@ -238,15 +238,16 @@ class PersonaService:
         missing = [field for field in required if not data.get(field)]
         return missing
 
-    def _handle_recommend_place(self, session: dict, intent: dict) -> dict:
+    def _handle_recommend_place(self, session: dict, intent: dict, user_id: str = None) -> dict:
         """장소 추천 처리"""
 
         print(f"\n{'='*60}")
         print(f"[RECOMMENDATION START]")
+        print(f"   User ID: {user_id}")
         print(f"{'='*60}\n")
 
-        # suggest_service를 통해 추천 장소 가져오기
-        places = self.suggest_service.get_recommendations(k=5)
+        # suggest_service를 통해 추천 장소 가져오기 (user_id 전달)
+        places = self.suggest_service.get_recommendations(user_id=user_id, k=5)
 
         # 터미널 로깅
         print(f"\n{'='*60}")
