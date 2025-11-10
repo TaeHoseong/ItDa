@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:table_calendar/table_calendar.dart';
 
 /// 📅 CalendarProvider
@@ -13,30 +13,6 @@ class CalendarProvider extends ChangeNotifier {
   CalendarFormat get calendarFormat => _calendarFormat;
   DateTime get focusedDay => _focusedDay;
   DateTime? get selectedDay => _selectedDay;
-class Schedule {
-  final DateTime date;
-  final String title;
-  final String time;
-
-  // 장소 정보 (옵션)
-  final String? placeName;
-  final double? latitude;
-  final double? longitude;
-  final String? address;
-
-  Schedule({
-    required this.date,
-    required this.title,
-    required this.time,
-    this.placeName,
-    this.latitude,
-    this.longitude,
-    this.address,
-  });
-
-  /// 장소 정보가 있는지 확인
-  bool get hasPlace => latitude != null && longitude != null;
-}
 
   // ========== Setter ==========
 
@@ -62,6 +38,41 @@ class Schedule {
     _focusedDay = day;
     // setState 불필요 → notifyListeners() 호출 안 해도 무방하지만
     // 다른 위젯에서 이 값이 필요하다면 notifyListeners() 해도 됨.
+  }
+}
+
+class Schedule {
+  final DateTime date;
+  final String title;
+  final String time;
+
+  // 장소 정보 (옵션)
+  final String? placeName;
+  final double? latitude;
+  final double? longitude;
+  final String? address;
+
+  Schedule({
+    required this.date,
+    required this.title,
+    required this.time,
+    this.placeName,
+    this.latitude,
+    this.longitude,
+    this.address,
+  });
+
+  /// 장소 정보가 있는지 확인
+  bool get hasPlace => latitude != null && longitude != null;
+}
+
+class ScheduleProvider extends ChangeNotifier {
+  final Map<DateTime, List<Schedule>> _events = {};
+
+  List<Schedule> getEventsForDay(DateTime day) {
+    return _events[DateTime.utc(day.year, day.month, day.day)] ?? [];
+  }
+
   /// 모든 일정 반환 (지도 마커용)
   List<Schedule> getAllEvents() {
     final allEvents = <Schedule>[];

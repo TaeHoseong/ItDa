@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/schedule_provider.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -14,41 +17,20 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
 
-  /// 날짜별 일정 목록 (메모리)
-  final Map<DateTime, List<Schedule>> _events = {};
-
   DateTime _normalize(DateTime d) => DateTime(d.year, d.month, d.day);
 
-  List<Schedule> _getEventsForDay(DateTime day) {
-    return _events[_normalize(day)] ?? const [];
-  }
-
-  void _addEvent(DateTime day, Schedule schedule) {
-    final key = _normalize(day);
-    final list = _events[key] ?? [];
-    setState(() {
-      _events[key] = [...list, schedule];
-    });
-  }
-
-  void _removeEvent(DateTime day, int index) {
-    final key = _normalize(day);
-    final list = [...?_events[key]];
-    if (index < 0 || index >= list.length) return;
-    list.removeAt(index);
-    setState(() {
-      if (list.isEmpty) {
-        _events.remove(key);
-      } else {
-        _events[key] = list;
-      }
-    });
-  }
+  // TODO: ScheduleProvider에 removeEvent 메서드 추가 필요
+  // void _removeEvent(DateTime day, int index) {
+  //   final scheduleProvider = context.read<ScheduleProvider>();
+  //   scheduleProvider.removeEvent(day, index);
+  // }
 
   @override
   Widget build(BuildContext context) {
+    // ScheduleProvider를 watch해서 일정이 변경되면 자동으로 리빌드
+    final scheduleProvider = context.watch<ScheduleProvider>();
     final selectedDay = _selectedDay ?? _focusedDay;
-    final selectedEvents = _getEventsForDay(selectedDay);
+    final selectedEvents = scheduleProvider.getEventsForDay(selectedDay);
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAF8F5),
@@ -71,7 +53,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             startingDayOfWeek: StartingDayOfWeek.sunday,
 
             // 🔗 일정 연결 (여기가 핵심)
-            eventLoader: _getEventsForDay,
+            eventLoader: scheduleProvider.getEventsForDay,
 
             selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
 
@@ -250,26 +232,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // 시간
-                      if (schedule.startTime != null)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _formatTime(schedule.startTime!),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            if (schedule.endTime != null)
-                              Text(
-                                _formatTime(schedule.endTime!),
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.black54,
-                                ),
-                              ),
-                          ],
+                      if (schedule.time.isNotEmpty)
+                        Text(
+                          schedule.time,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                         )
                       else
                         const Icon(
@@ -291,13 +260,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            if (schedule.location != null &&
-                                schedule.location!.isNotEmpty)
+                            if (schedule.placeName != null &&
+                                schedule.placeName!.isNotEmpty)
                               Padding(
                                 padding:
                                     const EdgeInsets.only(top: 2.0),
                                 child: Text(
-                                  schedule.location!,
+                                  schedule.placeName!,
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: Colors.black54,
@@ -308,17 +277,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         ),
                       ),
 
-                      IconButton(
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          size: 20,
-                          color: Colors.black45,
-                        ),
-                        onPressed: () =>
-                            _removeEvent(selectedDay, index - 1),
-                      ),
+                      // TODO: 삭제 기능은 ScheduleProvider에 removeEvent 추가 후 활성화
+                      // IconButton(
+                      //   padding: EdgeInsets.zero,
+                      //   constraints: const BoxConstraints(),
+                      //   icon: const Icon(
+                      //     Icons.delete_outline,
+                      //     size: 20,
+                      //     color: Colors.black45,
+                      //   ),
+                      //   onPressed: () =>
+                      //       _removeEvent(selectedDay, index - 1),
+                      // ),
                     ],
                   ),
                 );
@@ -551,14 +521,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         }
                         final loc =
                             locationController.text.trim();
-                        final schedule = Schedule(
-                          title: title,
-                          startTime: startTime,
-                          endTime: endTime,
-                          location:
-                              loc.isEmpty ? null : loc,
+
+                        // TimeOfDay를 String으로 변환
+                        String timeString = '';
+                        if (startTime != null) {
+                          timeString = _formatTime(startTime!);
+                          if (endTime != null) {
+                            timeString += ' - ${_formatTime(endTime!)}';
+                          }
+                        }
+
+                        // ScheduleProvider를 사용해 일정 추가
+                        final scheduleProvider = context.read<ScheduleProvider>();
+                        scheduleProvider.addEvent(
+                          normalized,
+                          title,
+                          timeString,
+                          placeName: loc.isEmpty ? null : loc,
                         );
-                        _addEvent(normalized, schedule);
+
                         Navigator.of(ctx).pop();
                       },
                       child:
@@ -629,20 +610,7 @@ class _TimeChip extends StatelessWidget {
   }
 }
 
-// 일정 모델
-class Schedule {
-  final String title;
-  final TimeOfDay? startTime;
-  final TimeOfDay? endTime;
-  final String? location;
-
-  Schedule({
-    required this.title,
-    this.startTime,
-    this.endTime,
-    this.location,
-  });
-}
+// Schedule 클래스는 schedule_provider.dart에서 import 됨
 
 // 캘린더 범위
 final DateTime kFirstDay = DateTime.utc(2010, 1, 1);
