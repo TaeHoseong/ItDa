@@ -89,16 +89,24 @@ async def verify_google_token(token: str) -> Dict[str, str]:
         ValueError: If token is invalid or verification fails
     """
     try:
-        # Verify the token using Google's public keys
+        # Verify the token using Google's public keys (without audience check)
         idinfo = id_token.verify_oauth2_token(
             token,
             google_requests.Request(),
-            settings.GOOGLE_CLIENT_ID
+            None  # Don't check audience automatically
         )
 
         # Verify the token was issued by Google
         if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
             raise ValueError('Wrong issuer')
+
+        # Manually verify audience (allow both Web and Android Client IDs)
+        allowed_audiences = [
+            settings.GOOGLE_CLIENT_ID,
+            settings.GOOGLE_ANDROID_CLIENT_ID
+        ]
+        if idinfo.get('aud') not in allowed_audiences:
+            raise ValueError(f"Invalid audience: {idinfo.get('aud')}")
 
         # Extract user information
         user_info = {

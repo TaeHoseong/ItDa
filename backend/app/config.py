@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_ANDROID_CLIENT_ID: str = ""
 
     # JWT Authentication
     JWT_SECRET_KEY: str = ""
