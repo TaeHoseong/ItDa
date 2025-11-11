@@ -168,7 +168,6 @@ class SuggestService:
             )
         except Exception as e:
             print(e)
-            breakpoint()
 
         # results는 [(name, score), ...] 형태
         # DB에서 상세 정보를 가져와서 병합
