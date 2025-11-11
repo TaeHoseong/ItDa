@@ -112,46 +112,37 @@ class PersonaService:
         }
 
     async def _handle_create_schedule(self, session: dict, intent: dict) -> dict:
-        """일정 생성 시도"""
+        """일정 생성 정보 수집 (실제 저장은 프론트엔드에서 처리)"""
 
         # pending_data 사용 (이미 병합됨)
         schedule_data = session["pending_data"].copy()
 
-        print(f"\n[CREATE SCHEDULE] Attempting to create schedule")
+        print(f"\n[CREATE SCHEDULE] Collecting schedule information")
         print(f"   Data: {schedule_data}")
 
         # 필수 정보 체크
         is_complete = self._is_complete(schedule_data)
 
         if is_complete:
-            # 정보 충분 → DB 저장
-            schedule_service = ScheduleService(self.db)
-            schedule = schedule_service.create(user_id="system", data=schedule_data)
+            # 정보 충분 → 프론트엔드에 전달 (DB 저장은 프론트가 처리)
             session["pending_data"] = {}  # 초기화
 
-            print(f"[SUCCESS] Schedule created!")
-            print(f"   {schedule}\n")
+            print(f"[READY] Schedule data ready for frontend!")
+            print(f"   Title: {schedule_data['title']}")
+            print(f"   Date: {schedule_data['date']}")
+            print(f"   Time: {schedule_data['time']}\n")
 
             # 메시지 개선
             improved_message = (
-                f"Schedule created successfully!\n\n"
-                f"Title: {schedule.title}\n"
-                f"Date: {schedule.date}\n"
-                f"Time: {schedule.time}"
+                f"일정을 추가할게요!\n\n"
+                f"제목: {schedule_data['title']}\n"
+                f"날짜: {schedule_data['date']}\n"
+                f"시간: {schedule_data['time']}"
             )
 
             return {
-                "action_taken": "schedule_created",
-                "schedule": {
-                    "id": schedule.id,
-                    "title": schedule.title,
-                    "date": schedule.date.isoformat(),
-                    "time": schedule.time,
-                    "place_name": schedule.place_name,
-                    "latitude": schedule.latitude,
-                    "longitude": schedule.longitude,
-                    "address": schedule.address
-                },
+                "action_taken": "schedule_ready",
+                "schedule_data": schedule_data,  # 프론트엔드가 이 데이터로 API 호출
                 "improved_message": improved_message
             }
         else:
@@ -282,32 +273,21 @@ class PersonaService:
         is_complete = self._is_complete(schedule_data)
 
         if is_complete:
-            # 정보 충분 → DB 저장
-            schedule_service = ScheduleService(self.db)
-            schedule = schedule_service.create(user_id="system", data=schedule_data)
+            # 정보 충분 → 프론트엔드에 전달 (DB 저장은 프론트가 처리)
             session["pending_data"] = {}
             session["recommended_places"] = []  # 초기화
 
             improved_message = (
-                f"✅ 일정이 추가되었어요!\n\n"
+                f"✅ 일정을 추가할게요!\n\n"
                 f"장소: {selected_place['name']}\n"
-                f"제목: {schedule.title}\n"
-                f"날짜: {schedule.date}\n"
-                f"시간: {schedule.time}"
+                f"제목: {schedule_data['title']}\n"
+                f"날짜: {schedule_data['date']}\n"
+                f"시간: {schedule_data['time']}"
             )
 
             return {
-                "action_taken": "schedule_created",
-                "schedule": {
-                    "id": schedule.id,
-                    "title": schedule.title,
-                    "date": schedule.date.isoformat(),
-                    "time": schedule.time,
-                    "place_name": schedule.place_name,
-                    "latitude": schedule.latitude,
-                    "longitude": schedule.longitude,
-                    "address": schedule.address
-                },
+                "action_taken": "schedule_ready",
+                "schedule_data": schedule_data,  # 프론트엔드가 이 데이터로 API 호출
                 "improved_message": improved_message
             }
         else:

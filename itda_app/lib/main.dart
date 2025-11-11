@@ -145,6 +145,12 @@ class _MainScreenState extends State<MainScreen> {
       const CalendarScreen(),
       const ChatScreen(),
     ];
+
+    // 백엔드에서 일정 불러오기
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final scheduleProvider = Provider.of<ScheduleProvider>(context, listen: false);
+      scheduleProvider.fetchSchedulesFromBackend();
+    });
   }
 
   void _nextPersonaSentence() {
