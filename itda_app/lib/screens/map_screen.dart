@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/map_provider.dart';
 import '../providers/schedule_provider.dart';
+import '../providers/navigation_provider.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -16,43 +17,28 @@ class _MapScreenState extends State<MapScreen> {
   NaverMapController? _mapController;
   List<String> _currentMarkerIds = [];
   bool _isSyncing = false;
-  NLatLng? _lastCameraTarget; // 마지막 카메라 위치 추적
-  bool _isProgrammaticMove = false; // 프로그래밍 방식의 이동 여부
+  bool _isProgrammaticMove = false;
 
   @override
   void initState() {
     super.initState();
-    // Provider 리스너 등록
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final scheduleProvider = context.read<ScheduleProvider>();
-      final mapProvider = context.read<MapProvider>();
-
       scheduleProvider.addListener(_onScheduleChanged);
-      mapProvider.addListener(_onMapProviderChanged);
     });
   }
 
   @override
   void dispose() {
     final scheduleProvider = context.read<ScheduleProvider>();
-    final mapProvider = context.read<MapProvider>();
-
     scheduleProvider.removeListener(_onScheduleChanged);
-    mapProvider.removeListener(_onMapProviderChanged);
     super.dispose();
   }
 
-  /// ScheduleProvider 변경 시 호출 (마커 동기화)
   void _onScheduleChanged() {
     final mapProvider = context.read<MapProvider>();
     final scheduleProvider = context.read<ScheduleProvider>();
     _syncMarkersIfNeeded(mapProvider, scheduleProvider);
-  }
-
-  /// MapProvider 변경 시 호출 (카메라 이동)
-  void _onMapProviderChanged() {
-    final mapProvider = context.read<MapProvider>();
-    _moveCameraIfNeeded(mapProvider);
   }
 
   /// 마커를 지도에 추가
@@ -81,33 +67,22 @@ class _MapScreenState extends State<MapScreen> {
     debugPrint('마커 클릭: ${marker.id}');
   }
 
-  /// 카메라 이동 처리
-  void _moveCameraIfNeeded(MapProvider mapProvider) {
+  void _moveCameraToTarget(MapProvider mapProvider) {
     final controller = _mapController;
     if (controller == null) return;
 
-    final newTarget = mapProvider.cameraTarget;
+    _isProgrammaticMove = true;
 
-    // 카메라 위치가 변경되었는지 확인
-    if (_lastCameraTarget == null ||
-        _lastCameraTarget!.latitude != newTarget.latitude ||
-        _lastCameraTarget!.longitude != newTarget.longitude) {
-      _lastCameraTarget = newTarget;
+    final cameraUpdate = NCameraUpdate.fromCameraPosition(
+      NCameraPosition(
+        target: mapProvider.cameraTarget,
+        zoom: mapProvider.zoom,
+      ),
+    );
+    controller.updateCamera(cameraUpdate);
 
-      // 프로그래밍 방식의 이동임을 표시
-      _isProgrammaticMove = true;
-
-      // 실제로 지도 카메라 이동
-      final cameraUpdate = NCameraUpdate.fromCameraPosition(
-        NCameraPosition(
-          target: newTarget,
-          zoom: mapProvider.zoom,
-        ),
-      );
-      controller.updateCamera(cameraUpdate);
-
-      debugPrint('🗺️ 카메라 이동: ${newTarget.latitude}, ${newTarget.longitude}');
-    }
+    mapProvider.clearPendingMove();
+    debugPrint('🗺️ 지도 탭 진입 시 카메라 이동 완료');
   }
 
   /// 일정 변경 시 마커 동기화
@@ -156,7 +131,14 @@ class _MapScreenState extends State<MapScreen> {
   Widget build(BuildContext context) {
     final padding = MediaQuery.of(context).padding;
     final size = MediaQuery.of(context).size;
-    final mapProvider = context.read<MapProvider>();
+    final mapProvider = context.watch<MapProvider>();
+    final navigationProvider = context.watch<NavigationProvider>();
+
+    if (navigationProvider.currentIndex == 1 && mapProvider.hasPendingMove) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _moveCameraToTarget(mapProvider);
+      });
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
