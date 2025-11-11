@@ -117,32 +117,39 @@ class PersonaChatProvider extends ChangeNotifier {
         _lastMessageWasRecommendation = false;
       }
 
-      // 일정 생성 처리 → ScheduleProvider에 추가
-      if (response['action'] == 'create_schedule' &&
-          response['data']?['schedule'] != null) {
-        final schedule = response['data']['schedule'] as Map<String, dynamic>;
-        _lastScheduleCreated = schedule;
+      // 일정 생성 처리 → 백엔드에 저장
+      final actionTaken = response['data']?['action_taken'];
+      if (actionTaken == 'schedule_ready' &&
+          response['data']?['schedule_data'] != null) {
+        final scheduleData = response['data']['schedule_data'] as Map<String, dynamic>;
 
-        // ScheduleProvider에 일정 추가
+        // ScheduleProvider로 백엔드에 일정 생성
         if (_scheduleProvider != null) {
           try {
-            // 날짜 파싱 (YYYY-MM-DD 형식 가정)
-            final dateStr = schedule['date'] as String;
-            final dateParts = dateStr.split('-');
-            final date = DateTime(
-              int.parse(dateParts[0]),
-              int.parse(dateParts[1]),
-              int.parse(dateParts[2]),
+            // 날짜 파싱 (YYYY-MM-DD 형식)
+            final dateStr = scheduleData['date'] as String;
+            final date = DateTime.parse(dateStr);
+
+            // 백엔드에 일정 생성 (DB 저장 + 로컬 추가)
+            await _scheduleProvider!.createScheduleWithBackend(
+              day: date,
+              title: scheduleData['title'] as String,
+              time: scheduleData['time'] as String? ?? '',
+              placeName: scheduleData['place_name'] as String?,
+              latitude: scheduleData['latitude']?.toDouble(),
+              longitude: scheduleData['longitude']?.toDouble(),
+              address: scheduleData['address'] as String?,
             );
 
-            _scheduleProvider!.addEvent(
-              date,
-              schedule['title'] as String,
-              schedule['time'] as String? ?? '',
-            );
-            debugPrint('✅ 일정이 ScheduleProvider에 추가됨');
+            debugPrint('✅ 일정이 백엔드에 저장되고 ScheduleProvider에 추가됨');
+            _lastScheduleCreated = scheduleData;
           } catch (e) {
-            debugPrint('⚠️ ScheduleProvider 추가 실패: $e');
+            debugPrint('⚠️ 백엔드 일정 생성 실패: $e');
+            // 에러 발생 시 사용자에게 알림
+            _addMessage(
+              text: '일정 저장에 실패했어요. 다시 시도해주세요.',
+              sender: PersonaSender.bot,
+            );
           }
         }
       }

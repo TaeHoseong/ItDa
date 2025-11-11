@@ -30,6 +30,7 @@ def get_system_prompt():
 3. **create_schedule**: 새 일정 생성 (제목+날짜+시간 모두 있음)
 4. **update_schedule**: 기존 일정 수정/취소
 5. **recommend_place**: 장소 추천 요청
+6. **view_schedule**: 일정 조회 요청
 
 ## 정보 추출
 - 날짜: "내일"→{tomorrow.strftime('%Y-%m-%d')}, "모레"→{day_after.strftime('%Y-%m-%d')}
@@ -51,11 +52,12 @@ def get_system_prompt():
     "title": "일정 제목 또는 null",
     "date": "YYYY-MM-DD 또는 null",
     "time": "HH:MM 또는 null",
-    "food": "유저가 원하는 음식"
+    "food": "유저가 원하는 음식",
     "old_value": "수정시 기존값",
     "new_value": "수정시 새값",
     "field": "수정 필드(time/date/title)",
-    "action_type": "modify 또는 cancel"
+    "action_type": "modify 또는 cancel",
+    "timeframe": "일정 조회 범위 (today/tomorrow/this_week/all)"
   }}
 }}
 
@@ -68,6 +70,9 @@ def get_system_prompt():
 "파스타 맛집 추천해줘" → recommend_place (장소 추천)
 "데이트 장소 알려줘" → recommend_place (장소 추천)
 "어디 갈까?" → recommend_place (장소 추천)
+"내 일정 보여줘" → view_schedule (timeframe: all)
+"오늘 일정 뭐있어?" → view_schedule (timeframe: today)
+"이번 주 일정" → view_schedule (timeframe: this_week)
 
 유연하게 이해하고, 자연스러운 한국어로 응답하세요."""
 
@@ -155,6 +160,23 @@ def fallback_response(message: str, context: dict = None) -> dict:
             "action": "general_chat",
             "message": "천만에요! 😊",
             "extracted_data": {}
+        }
+
+    # 일정 조회 키워드
+    view_keywords = ["일정 보여", "일정 알려", "일정 뭐", "일정 있어", "무슨 일정", "스케줄"]
+    if any(kw in message_lower for kw in view_keywords):
+        timeframe = "all"
+        if "오늘" in message_lower:
+            timeframe = "today"
+        elif "내일" in message_lower:
+            timeframe = "tomorrow"
+        elif "이번 주" in message_lower or "이번주" in message_lower:
+            timeframe = "this_week"
+
+        return {
+            "action": "view_schedule",
+            "message": "일정을 확인해드릴게요! 📅",
+            "extracted_data": {"timeframe": timeframe}
         }
 
     # 장소 추천 키워드
