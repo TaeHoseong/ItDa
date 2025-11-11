@@ -1,32 +1,77 @@
-from typing import List
+from typing import List, Optional
 from datetime import datetime
-import uuid
+from sqlalchemy.orm import Session
+from fastapi import HTTPException
+from app.models.schedule import Schedule
 
-# 간단한 메모리 DB
-schedules_db: List[dict] = []
 
 class ScheduleService:
-    async def create(self, schedule_data: dict) -> dict:
-        new_schedule = {
-            "id": str(uuid.uuid4()),
-            **schedule_data,
-            "created_at": datetime.now().isoformat(),
-        }
-        schedules_db.append(new_schedule)
-        return new_schedule
+    """일정 관리 서비스 (SQLAlchemy 기반)"""
 
-    async def get_all(self) -> List[dict]:
-        return sorted(schedules_db, key=lambda x: (x.get("date", ""), x.get("time", "")))
+    def __init__(self, db: Session):
+        self.db = db
 
-    async def update(self, schedule_id: str, updates: dict) -> dict:
-        for schedule in schedules_db:
-            if schedule["id"] == schedule_id:
-                schedule.update(updates)
-                return schedule
-        raise ValueError("일정을 찾을 수 없습니다")
+    def create(self, user_id: str, data: dict) -> Schedule:
+        """일정 생성"""
+        schedule = Schedule(
+            user_id=user_id,
+            title=data["title"],
+            date=data["date"] if isinstance(data["date"], datetime) else datetime.fromisoformat(data["date"]),
+            time=data.get("time", ""),
+            place_name=data.get("place_name"),
+            latitude=data.get("latitude"),
+            longitude=data.get("longitude"),
+            address=data.get("address")
+        )
+        self.db.add(schedule)
+        self.db.commit()
+        self.db.refresh(schedule)
+        return schedule
 
-    async def delete(self, schedule_id: str) -> bool:
-        global schedules_db
-        original_len = len(schedules_db)
-        schedules_db = [s for s in schedules_db if s["id"] != schedule_id]
-        return len(schedules_db) < original_len
+    def get_by_user(self, user_id: str) -> List[Schedule]:
+        """사용자 전체 일정 조회"""
+        return self.db.query(Schedule)\
+            .filter(Schedule.user_id == user_id)\
+            .order_by(Schedule.date.asc())\
+            .all()
+
+    def get_by_id(self, schedule_id: int) -> Optional[Schedule]:
+        """특정 일정 조회"""
+        return self.db.query(Schedule).filter(Schedule.id == schedule_id).first()
+
+    def get_by_date(self, user_id: str, date: datetime) -> List[Schedule]:
+        """특정 날짜 일정 조회"""
+        start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = date.replace(hour=23, minute=59, second=59, microsecond=999999)
+        return self.db.query(Schedule)\
+            .filter(Schedule.user_id == user_id)\
+            .filter(Schedule.date >= start, Schedule.date <= end)\
+            .order_by(Schedule.date.asc())\
+            .all()
+
+    def update(self, schedule_id: int, data: dict) -> Schedule:
+        """일정 수정"""
+        schedule = self.get_by_id(schedule_id)
+        if not schedule:
+            raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다")
+
+        # 제공된 필드만 업데이트
+        for key, value in data.items():
+            if value is not None and hasattr(schedule, key):
+                if key == "date" and isinstance(value, str):
+                    value = datetime.fromisoformat(value)
+                setattr(schedule, key, value)
+
+        self.db.commit()
+        self.db.refresh(schedule)
+        return schedule
+
+    def delete(self, schedule_id: int) -> bool:
+        """일정 삭제"""
+        schedule = self.get_by_id(schedule_id)
+        if not schedule:
+            raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다")
+
+        self.db.delete(schedule)
+        self.db.commit()
+        return True
