@@ -26,13 +26,16 @@ def extract_features(place: json, persona):
             list(features["experienceType"].values()) +
             list(features["spaceCharacteristics"].values())
         )
-        rating = features["contextual"]["average_rating"]
+        # None 처리: average_rating이 None이면 0으로 대체
+        rating = features["contextual"].get("average_rating", 0)
+        if rating is None:
+            rating = 0
         # 현재 데이터엔 range 값으로 들어가 있어서 이걸 normalize해줘야함(지금은 임시로 0)
-        price = 0 
+        price = 0
         return np.array(features_array, dtype=float), rating, price
     except KeyError as e:
         print(f"key error | {e} in place: {place.get('name', 'Unknown')}")
-        return np.zeros(20), 0, 0, 0
+        return np.zeros(20), 0, 0  # 수정: 3개 값 반환 (4개 아님)
 
 def recommend_topk(db, persona, candidate_names, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4):
     conn = sqlite3.connect(db)
