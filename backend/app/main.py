@@ -5,11 +5,12 @@ from app.config import settings
 from app.core.database import engine
 from app.core.exceptions import custom_exception_handler
 from app.models import place, user
+from app.models.schedule import Schedule
+from app.core.database import Base
 
 
 # DB 테이블 생성
-place.Base.metadata.create_all(bind=engine)
-user.Base.metadata.create_all(bind=engine)
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
