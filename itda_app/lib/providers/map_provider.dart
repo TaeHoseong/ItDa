@@ -21,11 +21,13 @@ class MapProvider extends ChangeNotifier {
   double _zoom = 14.0;
 
   bool _initialized = false;
+  bool _hasPendingMove = false;  // 지도 탭 진입 시 이동 대기 플래그
   final List<MapMarker> _markers = [];
 
   bool get isInitialized => _initialized;
   NLatLng get cameraTarget => _cameraTarget;
   double get zoom => _zoom;
+  bool get hasPendingMove => _hasPendingMove;
   List<MapMarker> get markers => List.unmodifiable(_markers);
 
   /// 최초 1회 마커/상태 세팅
@@ -79,14 +81,23 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-  /// 특정 장소로 카메라 이동
+  /// 특정 장소로 카메라 이동 (지도 탭 진입 시 실제 이동)
   void moveToPlace(double latitude, double longitude, {double zoom = 15.0}) {
     _cameraTarget = NLatLng(latitude, longitude);
     _zoom = zoom;
+    _hasPendingMove = true;  // 이동 대기 플래그 설정
     notifyListeners();
 
     if (kDebugMode) {
-      print('MapProvider: 카메라 이동 ($latitude, $longitude, zoom: $zoom)');
+      print('MapProvider: 카메라 이동 예약 ($latitude, $longitude, zoom: $zoom)');
+    }
+  }
+
+  /// 대기 중인 카메라 이동 완료 처리
+  void clearPendingMove() {
+    _hasPendingMove = false;
+    if (kDebugMode) {
+      print('MapProvider: 카메라 이동 완료, 플래그 초기화');
     }
   }
 }
