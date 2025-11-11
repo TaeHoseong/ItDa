@@ -1,8 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:itda_app/main.dart'; // MainScreen 사용
-import '../models/user_persona.dart';
-import '../services/user_api_service.dart';
 
 /// SurveyScreen (4-page wizard + 5-star Likert)
 /// - 4개 섹션(페이지): 1) mainCategory, 2) atmosphere, 3) experienceType, 4) spaceCharacteristics
@@ -216,64 +214,31 @@ class _SurveyScreenState extends State<SurveyScreen> {
   Future<void> _submit() async {
     setState(() => _submitting = true);
 
-    try {
-      // Create UserPersona object from survey results
-      final persona = UserPersona(
-        foodCafe: _scoreFromStars(foodCafe),
-        cultureArt: _scoreFromStars(cultureArt),
-        activitySports: _scoreFromStars(activitySports),
-        natureHealing: _scoreFromStars(natureHealing),
-        craftExperience: _scoreFromStars(craftExperience),
-        shopping: _scoreFromStars(shopping),
-        quiet: _scoreFromStars(quiet),
-        romantic: _scoreFromStars(romantic),
-        trendy: _scoreFromStars(trendy),
-        privateVibe: _scoreFromStars(privateVibe),
-        artistic: _scoreFromStars(artistic),
-        energetic: _scoreFromStars(energetic),
-        passiveEnjoyment: _scoreFromStars(passiveEnjoyment),
-        activeParticipation: _scoreFromStars(activeParticipation),
-        socialBonding: _scoreFromStars(socialBonding),
-        relaxationFocused: _scoreFromStars(relaxationFocused),
-        indoorRatio: _scoreFromStars(indoorRatio),
-        crowdednessExpected: _scoreFromStars(crowdednessExpected),
-        photoWorthiness: _scoreFromStars(photoWorthiness),
-        scenicView: _scoreFromStars(scenicView),
-      );
-
-      // Send to backend API
-      await UserApiService.updatePersona(persona);
-
-      // Generate pretty format for display
-      String f(double v) => v.toStringAsFixed(2);
-      final pretty = '''
-places = np.array([[
-    ${f(persona.foodCafe)}, ${f(persona.cultureArt)}, ${f(persona.activitySports)}, ${f(persona.natureHealing)}, ${f(persona.craftExperience)}, ${f(persona.shopping)},               # main category
-    ${f(persona.quiet)}, ${f(persona.romantic)}, ${f(persona.trendy)}, ${f(persona.privateVibe)}, ${f(persona.artistic)}, ${f(persona.energetic)},   # atmosphere
-    ${f(persona.passiveEnjoyment)}, ${f(persona.activeParticipation)}, ${f(persona.socialBonding)}, ${f(persona.relaxationFocused)},             # experienceType
-    ${f(persona.indoorRatio)}, ${f(persona.crowdednessExpected)}, ${f(persona.photoWorthiness)}, ${f(persona.scenicView)},            # spaceCharacteristics
+    String f(double v) => v.toStringAsFixed(2);
+    final pretty = '''
+places = np.array([[ 
+    ${f(_scoreFromStars(foodCafe))}, ${f(_scoreFromStars(cultureArt))}, ${f(_scoreFromStars(activitySports))}, ${f(_scoreFromStars(natureHealing))}, ${f(_scoreFromStars(craftExperience))}, ${f(_scoreFromStars(shopping))},               # main category
+    ${f(_scoreFromStars(quiet))}, ${f(_scoreFromStars(romantic))}, ${f(_scoreFromStars(trendy))}, ${f(_scoreFromStars(privateVibe))}, ${f(_scoreFromStars(artistic))}, ${f(_scoreFromStars(energetic))},   # atmosphere
+    ${f(_scoreFromStars(passiveEnjoyment))}, ${f(_scoreFromStars(activeParticipation))}, ${f(_scoreFromStars(socialBonding))}, ${f(_scoreFromStars(relaxationFocused))},             # experienceType
+    ${f(_scoreFromStars(indoorRatio))}, ${f(_scoreFromStars(crowdednessExpected))}, ${f(_scoreFromStars(photoWorthiness))}, ${f(_scoreFromStars(scenicView))},            # spaceCharacteristics
 ]])''';
 
-      if (!mounted) return;
-      setState(() => _submitting = false);
+    // 설문 결과 → 해설 생성
+    final personaDescription = _buildPersonaDescription();
 
-      // 풀스크린 결과 페이지로 이동 (현재 설문 페이지 대체)
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => ResultPage(pretty: pretty)),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _submitting = false);
+    if (!mounted) return;
+    setState(() => _submitting = false);
 
-      // Show error message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('설문 제출 실패: $e'),
-          backgroundColor: Colors.red,
+    // 풀스크린 결과 페이지로 이동 (현재 설문 페이지 대체)
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ResultPage(
+          pretty: pretty,
+          persona: personaDescription, // 👈 결과 페이지로 전달
         ),
-      );
-    }
+      ),
+    );
   }
 
   // ---------- Reusable UI ----------
@@ -323,14 +288,55 @@ places = np.array([[
       ),
     );
   }
-}
 
+  String _buildPersonaDescription() {
+    double s(int value) => _scoreFromStars(value);
+    final tags = <String>[];
+
+    if (s(foodCafe) >= 0.8) {
+      tags.add('카페와 맛집을 탐험하며 대화를 즐기는 감성형');
+    }
+    if (s(natureHealing) >= 0.8) {
+      tags.add('도심을 잠시 벗어나 자연과 여유 속에서 힐링하는 타입');
+    }
+    if (s(activitySports) >= 0.8) {
+      tags.add('함께 움직이고 도전하는 액티비티 중심의 데이트를 선호');
+    }
+    if (s(cultureArt) >= 0.8) {
+      tags.add('전시·공연 등 문화 경험을 통해 대화를 깊게 나누는 스타일');
+    }
+    if (s(trendy) >= 0.8) {
+      tags.add('새로운 핫플, 트렌디한 공간을 빠르게 캐치하는 감각파');
+    }
+    if (s(privateVibe) >= 0.8 || s(quiet) >= 0.8) {
+      tags.add('프라이빗하고 조용한 장소에서 둘만의 시간을 중시');
+    }
+    if (s(photoWorthiness) >= 0.8 || s(scenicView) >= 0.8) {
+      tags.add('기록과 풍경, 사진이 잘 나오는 공간을 중요하게 생각');
+    }
+    if (s(relaxationFocused) >= 0.8) {
+      tags.add('복잡함보다 편안한 휴식과 안정감을 선호');
+    }
+
+    if (tags.isEmpty) {
+      return '당신은 상황과 기분에 따라 다양한 데이트 스타일을 유연하게 즐기는 균형형 타입이에요.';
+    }
+
+    // 첫 줄: 요약, 아래는 bullet 느낌으로 이어가기
+    final first = tags.first;
+    final rest = tags.skip(1).map((t) => '• $t').join('\n');
+
+    return rest.isEmpty
+        ? '당신은 $first 타입이에요.'
+        : '당신은 $first 타입이에요.\n$rest';
+  }
+}
 /// 별(0~5) 위젯
 /// - 토글: 현재 선택된 별(= value)을 다시 누르면 0으로 초기화
 class _StarRating extends StatelessWidget {
   final int value; // 0~5
   final ValueChanged<int> onChanged;
-  const _StarRating({required this.value, required this.onChanged});
+  const _StarRating({required this.value, required this.onChanged, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -356,7 +362,8 @@ class _StarRating extends StatelessWidget {
 /// 제출 결과 풀스크린 페이지
 class ResultPage extends StatelessWidget {
   final String pretty;
-  const ResultPage({super.key, required this.pretty});
+  final String persona;
+  const ResultPage({super.key, required this.pretty, required this.persona,});
 
   @override
   Widget build(BuildContext context) {
@@ -370,7 +377,17 @@ class ResultPage extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text(
+                persona,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 12),
               Card(
                 color: Colors.grey.shade100,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

@@ -51,6 +51,9 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(
+          create: (_) => PersonaChatProvider(),
+        ),
+        ChangeNotifierProvider(
           create: (_) => ScheduleProvider(),
         ),
         ChangeNotifierProxyProvider<ScheduleProvider, PersonaChatProvider>(
