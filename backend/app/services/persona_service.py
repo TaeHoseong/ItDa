@@ -71,10 +71,15 @@ class PersonaService:
         elif action == "select_place":
             response_data = await self._handle_select_place(session, intent)
         elif action == "view_schedule":
-            response_data = self._handle_view_schedule(intent, request.user_id)
+            response_data = self._handle_view_schedule(session, intent, request.user_id)
+
+        # improved_message가 있으면 그걸 사용, 없으면 intent["message"] 사용
+        final_message = intent["message"]
+        if response_data and "improved_message" in response_data:
+            final_message = response_data["improved_message"]
 
         return ChatResponse(
-            message=intent["message"],
+            message=final_message,
             action=action,
             data=response_data
         )
@@ -306,8 +311,11 @@ class PersonaService:
                 "improved_message": improved_message
             }
 
-    def _handle_view_schedule(self, intent: dict, user_id: str = None) -> dict:
+    def _handle_view_schedule(self, session: dict, intent: dict, user_id: str = None) -> dict:
         """일정 조회 처리"""
+
+        # pending_data 초기화 (일정 조회는 독립적인 액션)
+        session["pending_data"] = {}
 
         if not self.db:
             return {
@@ -328,6 +336,7 @@ class PersonaService:
         print(f"[VIEW SCHEDULE]")
         print(f"   User ID: {user_id}")
         print(f"   Timeframe: {timeframe}")
+        print(f"   Current datetime: {datetime.now()}")
         print(f"{'='*60}\n")
 
         # ScheduleService 인스턴스 생성 (DB session 전달)
@@ -358,9 +367,8 @@ class PersonaService:
         print(f"[FOUND] {len(schedules)} schedule(s)")
 
         # 일정 포맷팅
-        if not schedules:
-            formatted_message = "등록된 일정이 없습니다. 😊"
-        else:
+        formatted_message = None
+        if schedules:
             schedule_lines = []
             for idx, schedule in enumerate(schedules, 1):
                 date_str = schedule.date.strftime("%Y-%m-%d (%A)")
@@ -388,13 +396,19 @@ class PersonaService:
             for s in schedules
         ]
 
-        print(f"[RESPONSE]\n{formatted_message}\n")
+        print(f"[RESPONSE]\n{formatted_message if formatted_message else 'No schedules'}\n")
         print(f"{'='*60}\n")
 
-        return {
+        result = {
             "action_taken": "schedules_retrieved",
             "schedules": schedules_data,
             "count": len(schedules),
             "timeframe": timeframe,
-            "formatted_message": formatted_message
         }
+
+        # 일정이 있을 때만 improved_message 설정 (OpenAI 메시지 유지)
+        if formatted_message:
+            result["formatted_message"] = formatted_message
+            result["improved_message"] = formatted_message
+
+        return result
