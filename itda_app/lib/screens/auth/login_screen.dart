@@ -79,14 +79,19 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleGoogleSignIn() async {
     setState(() => _googleLoading = true);
     try {
+      print('🔵 Google Sign-In 시작...');
       final account = await _google.signIn();
+      print('🔵 Account: ${account?.email}');
       if (account == null) throw Exception('로그인이 취소되었습니다.');
 
+      print('🔵 인증 정보 가져오는 중...');
       final auth = await account.authentication;
       final idToken = auth.idToken; // 서버에서 검증할 핵심 토큰
+      print('🔵 idToken 길이: ${idToken?.length}');
       if (idToken == null) throw Exception('idToken을 가져오지 못했습니다.');
 
       // 백엔드 API 호출
+      print('🔵 백엔드 API 호출: ${ApiConfig.baseUrl}/auth/google');
       final resp = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/auth/google'),
         headers: {'Content-Type': 'application/json'},
@@ -96,7 +101,9 @@ class _LoginScreenState extends State<LoginScreen> {
         }),
       );
 
+      print('🔵 서버 응답: ${resp.statusCode}');
       if (resp.statusCode != 200) {
+        print('❌ 서버 에러: ${resp.body}');
         throw Exception('서버 인증 실패 (${resp.statusCode}) ${resp.body}');
       }
       final body = jsonDecode(resp.body) as Map<String, dynamic>;
@@ -120,10 +127,15 @@ class _LoginScreenState extends State<LoginScreen> {
         context,
         MaterialPageRoute(builder: (_) => const SurveyScreen()),
       );
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ Google Sign-In 에러: $e');
+      print('❌ Stack trace: $stackTrace');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('구글 로그인 실패: $e')),
+        SnackBar(
+          content: Text('구글 로그인 실패: $e'),
+          duration: const Duration(seconds: 5),
+        ),
       );
     } finally {
       if (mounted) setState(() => _googleLoading = false);
