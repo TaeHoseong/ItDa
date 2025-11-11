@@ -19,11 +19,66 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   DateTime _normalize(DateTime d) => DateTime(d.year, d.month, d.day);
 
-  // TODO: ScheduleProvider에 removeEvent 메서드 추가 필요
-  // void _removeEvent(DateTime day, int index) {
-  //   final scheduleProvider = context.read<ScheduleProvider>();
-  //   scheduleProvider.removeEvent(day, index);
-  // }
+  // ===== 일정 옵션 BottomSheet =====
+  void _showScheduleOptions(DateTime day, int index, Schedule schedule) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.black26,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit_outlined, color: Colors.black87),
+                title: const Text(
+                  '수정',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _openEditScheduleSheet(day, index, schedule);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Color(0xFFFD9180)),
+                title: const Text(
+                  '삭제',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFFFD9180),
+                  ),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _confirmDelete(day, index, schedule);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -220,76 +275,73 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
                 final schedule = selectedEvents[index - 1];
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF1F1),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 시간
-                      if (schedule.time.isNotEmpty)
-                        Text(
-                          schedule.time,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        )
-                      else
-                        const Icon(
-                          Icons.schedule_rounded,
-                          size: 18,
-                          color: Colors.black54,
-                        ),
-                      const SizedBox(width: 12),
-
-                      // 제목 + 위치
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              schedule.title,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
+                return GestureDetector(
+                  onTap: () => _showScheduleOptions(selectedDay, index - 1, schedule),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF1F1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 시간
+                        if (schedule.time.isNotEmpty)
+                          Text(
+                            schedule.time,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
                             ),
-                            if (schedule.placeName != null &&
-                                schedule.placeName!.isNotEmpty)
-                              Padding(
-                                padding:
-                                    const EdgeInsets.only(top: 2.0),
-                                child: Text(
-                                  schedule.placeName!,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.black54,
-                                  ),
+                          )
+                        else
+                          const Icon(
+                            Icons.schedule_rounded,
+                            size: 18,
+                            color: Colors.black54,
+                          ),
+                        const SizedBox(width: 12),
+
+                        // 제목 + 위치
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                schedule.title,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                          ],
+                              if (schedule.placeName != null &&
+                                  schedule.placeName!.isNotEmpty)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(top: 2.0),
+                                  child: Text(
+                                    schedule.placeName!,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
                         ),
-                      ),
 
-                      // TODO: 삭제 기능은 ScheduleProvider에 removeEvent 추가 후 활성화
-                      // IconButton(
-                      //   padding: EdgeInsets.zero,
-                      //   constraints: const BoxConstraints(),
-                      //   icon: const Icon(
-                      //     Icons.delete_outline,
-                      //     size: 20,
-                      //     color: Colors.black45,
-                      //   ),
-                      //   onPressed: () =>
-                      //       _removeEvent(selectedDay, index - 1),
-                      // ),
-                    ],
+                        // 편집/삭제 아이콘
+                        const Icon(
+                          Icons.more_vert,
+                          size: 20,
+                          color: Colors.black45,
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -373,6 +425,257 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
               ),
             ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ===== 삭제 확인 다이얼로그 =====
+  void _confirmDelete(DateTime day, int index, Schedule schedule) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            '일정 삭제',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          content: Text(
+            '정말 "${schedule.title}" 일정을 삭제하시겠습니까?',
+            style: const TextStyle(fontSize: 15),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text(
+                '취소',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                final scheduleProvider = context.read<ScheduleProvider>();
+                scheduleProvider.removeEvent(day, index);
+                Navigator.of(ctx).pop();
+              },
+              child: const Text(
+                '삭제',
+                style: TextStyle(
+                  color: Color(0xFFFD9180),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ===== BottomSheet: 일정 수정 =====
+  void _openEditScheduleSheet(DateTime day, int index, Schedule schedule) {
+    final normalized = _normalize(day);
+    final titleController = TextEditingController(text: schedule.title);
+    final locationController = TextEditingController(text: schedule.placeName ?? '');
+
+    // 기존 시간 파싱
+    TimeOfDay? startTime;
+    TimeOfDay? endTime;
+    final timeRegex = RegExp(r'(AM|PM)\s+(\d+):(\d+)(?:\s*-\s*(AM|PM)\s+(\d+):(\d+))?');
+    final match = timeRegex.firstMatch(schedule.time);
+    if (match != null) {
+      final startPeriod = match.group(1);
+      final startHour = int.parse(match.group(2)!);
+      final startMinute = int.parse(match.group(3)!);
+      startTime = TimeOfDay(
+        hour: startPeriod == 'AM'
+            ? (startHour == 12 ? 0 : startHour)
+            : (startHour == 12 ? 12 : startHour + 12),
+        minute: startMinute,
+      );
+
+      if (match.group(4) != null) {
+        final endPeriod = match.group(4);
+        final endHour = int.parse(match.group(5)!);
+        final endMinute = int.parse(match.group(6)!);
+        endTime = TimeOfDay(
+          hour: endPeriod == 'AM'
+              ? (endHour == 12 ? 0 : endHour)
+              : (endHour == 12 ? 12 : endHour + 12),
+          minute: endMinute,
+        );
+      }
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 16,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setSheetState) {
+              Future<void> pickStart() async {
+                final picked = await _pickCupertinoTime(
+                  initial: startTime,
+                );
+                if (picked != null) {
+                  setSheetState(() => startTime = picked);
+                }
+              }
+
+              Future<void> pickEnd() async {
+                final picked = await _pickCupertinoTime(
+                  initial: endTime ?? startTime,
+                );
+                if (picked != null) {
+                  setSheetState(() => endTime = picked);
+                }
+              }
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.black26,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    _formatSelectedDate(normalized),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(
+                      hintText: '제목',
+                      border: InputBorder.none,
+                    ),
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: pickStart,
+                          child: _TimeChip(
+                            label: startTime == null
+                                ? '시작 시간'
+                                : _formatTime(startTime!),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: pickEnd,
+                          child: _TimeChip(
+                            label: endTime == null
+                                ? '종료 시간'
+                                : _formatTime(endTime!),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(Icons.place_outlined, size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: locationController,
+                          decoration: const InputDecoration(
+                            hintText: '위치',
+                            border: InputBorder.none,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF111111),
+                        foregroundColor: Colors.white,
+                        shape: const CircleBorder(),
+                        padding: const EdgeInsets.all(14),
+                        elevation: 2,
+                      ),
+                      onPressed: () {
+                        final title = titleController.text.trim();
+                        if (title.isEmpty) {
+                          Navigator.of(ctx).pop();
+                          return;
+                        }
+                        final loc = locationController.text.trim();
+
+                        // TimeOfDay를 String으로 변환
+                        String timeString = '';
+                        if (startTime != null) {
+                          timeString = _formatTime(startTime!);
+                          if (endTime != null) {
+                            timeString += ' - ${_formatTime(endTime!)}';
+                          }
+                        }
+
+                        // ScheduleProvider를 사용해 일정 수정
+                        final scheduleProvider = context.read<ScheduleProvider>();
+                        scheduleProvider.updateEvent(
+                          normalized,
+                          index,
+                          title,
+                          timeString,
+                          placeName: loc.isEmpty ? null : loc,
+                          latitude: schedule.latitude,
+                          longitude: schedule.longitude,
+                          address: schedule.address,
+                        );
+
+                        Navigator.of(ctx).pop();
+                      },
+                      child: const Icon(Icons.check, size: 22),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         );
       },
