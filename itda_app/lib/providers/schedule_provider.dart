@@ -109,4 +109,42 @@ class ScheduleProvider extends ChangeNotifier {
     ));
     notifyListeners();
   }
+
+  /// 특정 날짜의 특정 인덱스 일정 삭제
+  void removeEvent(DateTime day, int index) {
+    final key = DateTime.utc(day.year, day.month, day.day);
+    if (_events[key] != null && index >= 0 && index < _events[key]!.length) {
+      _events[key]!.removeAt(index);
+      if (_events[key]!.isEmpty) {
+        _events.remove(key);
+      }
+      notifyListeners();
+    }
+  }
+
+  /// 특정 날짜의 특정 인덱스 일정 수정
+  void updateEvent(
+    DateTime day,
+    int index,
+    String title,
+    String time, {
+    String? placeName,
+    double? latitude,
+    double? longitude,
+    String? address,
+  }) {
+    final key = DateTime.utc(day.year, day.month, day.day);
+    if (_events[key] != null && index >= 0 && index < _events[key]!.length) {
+      _events[key]![index] = Schedule(
+        date: key,
+        title: title,
+        time: time,
+        placeName: placeName,
+        latitude: latitude,
+        longitude: longitude,
+        address: address,
+      );
+      notifyListeners();
+    }
+  }
 }
