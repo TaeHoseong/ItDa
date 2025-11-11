@@ -30,13 +30,18 @@ def get_system_prompt():
 3. **create_schedule**: 새 일정 생성 (제목+날짜+시간 모두 있음)
 4. **update_schedule**: 기존 일정 수정/취소
 5. **recommend_place**: 장소 추천 요청
-6. **select_place**: 추천된 장소 선택 ("1번 갈래", "스타벅스 갈래", "첫번째로")
 
 ## 정보 추출
 - 날짜: "내일"→{tomorrow.strftime('%Y-%m-%d')}, "모레"→{day_after.strftime('%Y-%m-%d')}
 - 시간: "오후 3시"→15:00, "저녁 7시"→19:00, "3시"→15:00
 - 제목: 회의, 운동, 약속 등 일정 관련 명사
-- 장소 선택: "1번" → place_index: 1, "스타벅스" → place_name: "스타벅스"
+- 음식: 음식 관련된 키워드 "파스타 맛집 추천해줘"→"파스타"
+### 음식 키워드 추출 규칙
+- 사용자의 메시지에 특정 음식/식당/메뉴가 언급되면 무조건 extracted_data.food로 추출한다.
+- 예: "한식", "일식", "중식", "고기집", "파스타", "버거", "카레", "초밥", "라멘", "카페" 등
+- "카페 추천해줘"와 같이 들어올 경우 카페를 추출해야해 
+- "맛집 추천", "어디 갈까?"처럼 음식이 없는 경우 food는 null로 둔다.
+- 단순한 수식이 아니라 정확한 문자열("한식", "파스타")로 추출한다.
 
 ## 응답 형식 (JSON)
 {{
@@ -46,12 +51,11 @@ def get_system_prompt():
     "title": "일정 제목 또는 null",
     "date": "YYYY-MM-DD 또는 null",
     "time": "HH:MM 또는 null",
+    "food": "유저가 원하는 음식"
     "old_value": "수정시 기존값",
     "new_value": "수정시 새값",
     "field": "수정 필드(time/date/title)",
-    "action_type": "modify 또는 cancel",
-    "place_index": "선택한 장소 번호(1-5) 또는 null",
-    "place_name": "선택한 장소 이름 또는 null"
+    "action_type": "modify 또는 cancel"
   }}
 }}
 
@@ -61,14 +65,9 @@ def get_system_prompt():
 "7시말고 9시로" → update_schedule (시간 수정)
 "내일 일정 취소" → update_schedule (취소)
 "장소 추천해줘" → recommend_place (장소 추천)
+"파스타 맛집 추천해줘" → recommend_place (장소 추천)
 "데이트 장소 알려줘" → recommend_place (장소 추천)
 "어디 갈까?" → recommend_place (장소 추천)
-"1번 갈래" → select_place (place_index: "1", date/time: null)
-"스타벅스 갈게" → select_place (place_name: "스타벅스", date/time: null)
-"1번 내일 3시에" → select_place (place_index: "1", date: "2025-XX-XX", time: "15:00")
-"스타벅스 오후 2시에" → select_place (place_name: "스타벅스", time: "14:00")
-
-**중요**: 장소 선택("1번", "스타벅스" 등) 키워드가 있으면 무조건 select_place 액션을 사용하고, 날짜/시간 정보도 함께 추출하세요!
 
 유연하게 이해하고, 자연스러운 한국어로 응답하세요."""
 

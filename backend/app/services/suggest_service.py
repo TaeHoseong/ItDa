@@ -68,9 +68,33 @@ class SuggestService:
         # 20차원 벡터로 변환
         persona = list(row[:20])
         return persona
+    def get_candidate_places(self, specific_food):
+        import time
+        from app.external.google_search import search_place_google_v1
+        all_places = []
+        page_token = None
+        place_query = f"송도 {specific_food} 맛집"
+        print(f"🔍 '{place_query}' 검색 중...")
 
+        for _ in range(5):
+            result = search_place_google_v1(place_query, page_token)
+            if not result or "places" not in result:
+                break
+
+            all_places.extend(result["places"])
+            page_token = result.get("nextPageToken")
+            if not page_token or len(all_places) >= 15:
+                break
+            time.sleep(2)
+
+        print(f"✅ 총 {len(all_places)}개 장소 수집 완료")
+        candidate_names = []
+        for p in all_places:
+            candidate_names.append(p["displayName"]["text"])
+        return candidate_names
     def get_recommendations(
         self,
+        specific_food: str,
         persona: Optional[List[float]] = None,
         user_id: Optional[str] = None,
         k: int = 5,
@@ -123,18 +147,28 @@ class SuggestService:
         print(f"  indoor_ratio: {persona[16]:.2f}, crowdedness_expected: {persona[17]:.2f}")
         print(f"  photo_worthiness: {persona[18]:.2f}, scenic_view: {persona[19]:.2f}")
         print(f"{'='*60}\n")
+        candidates=None
+        # 특정 음식이 있는 경우 검색 먼저
+        if specific_food:
+            print(f"search for food {specific_food}...")
+            candidates = self.get_candidate_places(specific_food)
 
         # algorithm.py의 recommend_topk() 호출 (수정 없이 사용)
         # 첫 번째 인자로 db 경로 전달
-        results = algorithm.recommend_topk(
-            db=self.db_path,
-            persona=persona,
-            k=k,
-            alpha=alpha,
-            beta=beta,
-            gamma=gamma,
-            delta=delta
-        )
+        try:
+            results = algorithm.recommend_topk(
+                db=self.db_path,
+                persona=persona,
+                candidate_names=candidates,
+                k=k,
+                alpha=alpha,
+                beta=beta,
+                gamma=gamma,
+                delta=delta
+            )
+        except Exception as e:
+            print(e)
+            breakpoint()
 
         # results는 [(name, score), ...] 형태
         # DB에서 상세 정보를 가져와서 병합
