@@ -1,13 +1,15 @@
 from typing import Dict
+from datetime import datetime, timedelta
 from app.schemas.persona import ChatRequest, ChatResponse
 from app.services.openai_service import analyze_intent
 from app.services.schedule_service import ScheduleService
 from app.services.suggest_service import SuggestService
+from sqlalchemy.orm import Session
 
 class PersonaService:
-    def __init__(self, sessions: Dict):
+    def __init__(self, sessions: Dict, db: Session = None):
         self.sessions = sessions
-        self.schedule_service = ScheduleService()
+        self.db = db
         self.suggest_service = SuggestService()
 
     async def process_message(self, request: ChatRequest) -> ChatResponse:
@@ -68,6 +70,8 @@ class PersonaService:
             response_data = self._handle_recommend_place(session, intent, request.user_id)
         elif action == "select_place":
             response_data = await self._handle_select_place(session, intent)
+        elif action == "view_schedule":
+            response_data = self._handle_view_schedule(intent, request.user_id)
 
         return ChatResponse(
             message=intent["message"],
@@ -121,7 +125,8 @@ class PersonaService:
 
         if is_complete:
             # 정보 충분 → DB 저장
-            schedule = await self.schedule_service.create(schedule_data)
+            schedule_service = ScheduleService(self.db)
+            schedule = schedule_service.create(user_id="system", data=schedule_data)
             session["pending_data"] = {}  # 초기화
 
             print(f"[SUCCESS] Schedule created!")
@@ -130,14 +135,23 @@ class PersonaService:
             # 메시지 개선
             improved_message = (
                 f"Schedule created successfully!\n\n"
-                f"Title: {schedule['title']}\n"
-                f"Date: {schedule['date']}\n"
-                f"Time: {schedule['time']}"
+                f"Title: {schedule.title}\n"
+                f"Date: {schedule.date}\n"
+                f"Time: {schedule.time}"
             )
 
             return {
                 "action_taken": "schedule_created",
-                "schedule": schedule,
+                "schedule": {
+                    "id": schedule.id,
+                    "title": schedule.title,
+                    "date": schedule.date.isoformat(),
+                    "time": schedule.time,
+                    "place_name": schedule.place_name,
+                    "latitude": schedule.latitude,
+                    "longitude": schedule.longitude,
+                    "address": schedule.address
+                },
                 "improved_message": improved_message
             }
         else:
@@ -154,78 +168,14 @@ class PersonaService:
             }
 
     async def _handle_update_schedule(self, session: dict, intent: dict) -> dict:
-        """일정 수정 처리"""
+        """일정 수정 처리 (deprecated - DB 기반으로 변경 필요)"""
 
-        extracted = intent.get("extracted_data", {})
-        action_type = extracted.get("action_type")
-
-        print(f"\n[UPDATE SCHEDULE] Attempting to update schedule")
-        print(f"   Type: {action_type}")
-        print(f"   Data: {extracted}")
-
-        # 수정할 일정 찾기
-        schedules = await self.schedule_service.get_all()
-
-        # 조건에 맞는 일정 찾기
-        target_schedule = None
-
-        # 날짜로 찾기
-        if extracted.get("date"):
-            for s in schedules:
-                if s.get("date") == extracted["date"]:
-                    target_schedule = s
-                    break
-
-        # 제목으로 찾기
-        if not target_schedule and extracted.get("title"):
-            for s in schedules:
-                if extracted["title"] in s.get("title", ""):
-                    target_schedule = s
-                    break
-
-        # 가장 최근 일정 (아무 조건 없으면)
-        if not target_schedule and schedules:
-            target_schedule = schedules[-1]
-
-        if not target_schedule:
-            return {
-                "action_taken": "schedule_not_found",
-                "message": "Cannot find the schedule to modify. Which schedule would you like to update?"
-            }
-
-        # 취소
-        if action_type == "cancel":
-            await self.schedule_service.delete(target_schedule["id"])
-            print(f"[DELETED] Schedule deleted: {target_schedule['title']}")
-
-            return {
-                "action_taken": "schedule_cancelled",
-                "deleted_schedule": target_schedule,
-                "message": f"{target_schedule['title']} 일정을 취소했어요!"
-            }
-
-        # 수정
-        elif action_type == "modify":
-            field = extracted.get("field")
-            new_value = extracted.get("new_value")
-
-            if field and new_value:
-                updates = {field: new_value}
-                updated = await self.schedule_service.update(target_schedule["id"], updates)
-
-                print(f"[MODIFIED] Schedule updated:")
-                print(f"   {target_schedule[field]} -> {new_value}")
-
-                return {
-                    "action_taken": "schedule_updated",
-                    "old_schedule": target_schedule,
-                    "updated_schedule": updated,
-                    "message": f"Schedule updated successfully!"
-                }
+        # TODO: 이 기능은 user_id 기반으로 리팩토링 필요
+        # 현재는 deprecated 상태
 
         return {
             "action_taken": "update_failed",
-            "message": "Failed to update schedule. Please try again."
+            "message": "일정 수정 기능은 현재 업데이트 중입니다."
         }
 
     def _is_complete(self, data: dict) -> bool:
@@ -333,21 +283,31 @@ class PersonaService:
 
         if is_complete:
             # 정보 충분 → DB 저장
-            schedule = await self.schedule_service.create(schedule_data)
+            schedule_service = ScheduleService(self.db)
+            schedule = schedule_service.create(user_id="system", data=schedule_data)
             session["pending_data"] = {}
             session["recommended_places"] = []  # 초기화
 
             improved_message = (
                 f"✅ 일정이 추가되었어요!\n\n"
                 f"장소: {selected_place['name']}\n"
-                f"제목: {schedule['title']}\n"
-                f"날짜: {schedule['date']}\n"
-                f"시간: {schedule['time']}"
+                f"제목: {schedule.title}\n"
+                f"날짜: {schedule.date}\n"
+                f"시간: {schedule.time}"
             )
 
             return {
                 "action_taken": "schedule_created",
-                "schedule": schedule,
+                "schedule": {
+                    "id": schedule.id,
+                    "title": schedule.title,
+                    "date": schedule.date.isoformat(),
+                    "time": schedule.time,
+                    "place_name": schedule.place_name,
+                    "latitude": schedule.latitude,
+                    "longitude": schedule.longitude,
+                    "address": schedule.address
+                },
                 "improved_message": improved_message
             }
         else:
@@ -365,3 +325,96 @@ class PersonaService:
                 "missing_fields": missing,
                 "improved_message": improved_message
             }
+
+    def _handle_view_schedule(self, intent: dict, user_id: str = None) -> dict:
+        """일정 조회 처리"""
+
+        if not self.db:
+            return {
+                "action_taken": "error",
+                "message": "데이터베이스 연결이 필요합니다."
+            }
+
+        if not user_id:
+            return {
+                "action_taken": "error",
+                "message": "로그인이 필요합니다."
+            }
+
+        extracted = intent.get("extracted_data", {})
+        timeframe = extracted.get("timeframe", "all")
+
+        print(f"\n{'='*60}")
+        print(f"[VIEW SCHEDULE]")
+        print(f"   User ID: {user_id}")
+        print(f"   Timeframe: {timeframe}")
+        print(f"{'='*60}\n")
+
+        # ScheduleService 인스턴스 생성 (DB session 전달)
+        schedule_service = ScheduleService(self.db)
+
+        # 시간 범위 계산
+        now = datetime.now()
+        schedules = []
+
+        if timeframe == "today":
+            schedules = schedule_service.get_by_date(user_id, now)
+        elif timeframe == "tomorrow":
+            tomorrow = now + timedelta(days=1)
+            schedules = schedule_service.get_by_date(user_id, tomorrow)
+        elif timeframe == "this_week":
+            # 이번 주 모든 일정 (월요일부터 일요일)
+            start_of_week = now - timedelta(days=now.weekday())
+            end_of_week = start_of_week + timedelta(days=6)
+
+            all_schedules = schedule_service.get_by_user(user_id)
+            schedules = [
+                s for s in all_schedules
+                if start_of_week.date() <= s.date.date() <= end_of_week.date()
+            ]
+        else:  # "all"
+            schedules = schedule_service.get_by_user(user_id)
+
+        print(f"[FOUND] {len(schedules)} schedule(s)")
+
+        # 일정 포맷팅
+        if not schedules:
+            formatted_message = "등록된 일정이 없습니다. 😊"
+        else:
+            schedule_lines = []
+            for idx, schedule in enumerate(schedules, 1):
+                date_str = schedule.date.strftime("%Y-%m-%d (%A)")
+                time_str = schedule.time if schedule.time else "시간 미정"
+                place_str = f" @ {schedule.place_name}" if schedule.place_name else ""
+
+                schedule_lines.append(
+                    f"{idx}. [{date_str} {time_str}] {schedule.title}{place_str}"
+                )
+
+            formatted_message = "\n".join(schedule_lines)
+
+        # 응답 데이터 준비
+        schedules_data = [
+            {
+                "id": s.id,
+                "title": s.title,
+                "date": s.date.isoformat(),
+                "time": s.time,
+                "place_name": s.place_name,
+                "latitude": s.latitude,
+                "longitude": s.longitude,
+                "address": s.address
+            }
+            for s in schedules
+        ]
+
+        print(f"[RESPONSE]\n{formatted_message}\n")
+        print(f"{'='*60}\n")
+
+        return {
+            "action_taken": "schedules_retrieved",
+            "schedules": schedules_data,
+            "count": len(schedules),
+            "timeframe": timeframe,
+            "formatted_message": formatted_message
+        }
