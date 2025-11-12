@@ -37,7 +37,7 @@ def extract_features(place: json, persona):
         print(f"key error | {e} in place: {place.get('name', 'Unknown')}")
         return np.zeros(20), 0, 0  # 수정: 3개 값 반환 (4개 아님)
 
-def recommend_topk(db, persona, candidate_names, category, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4):
+def recommend_topk(db, persona, last_recommend, candidate_names, category, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4):
     conn = sqlite3.connect(db)
     cur = conn.cursor()
     
@@ -60,6 +60,9 @@ def recommend_topk(db, persona, candidate_names, category, k=3, alpha=0.8, beta=
             c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
             return R * c
     for name, latitude, longitude, scores in rows:
+        if last_recommend and name in last_recommend:
+            print(f"skip {name} (negative react)")
+            continue
         # 필터링
         if category:
             place_category = json.loads(scores)["placeFeatures"]["mainCategory"]

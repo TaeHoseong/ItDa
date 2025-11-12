@@ -30,7 +30,8 @@ def get_system_prompt():
 3. **create_schedule**: 새 일정 생성 (제목+날짜+시간 모두 있음)
 4. **update_schedule**: 기존 일정 수정/취소
 5. **recommend_place**: 장소 추천 요청
-6. **view_schedule**: 일정 조회 요청
+6. **re_recommend_place**: 장소 재추천 요청
+7. **view_schedule**: 일정 조회 요청
 
 ## 정보 추출
 - 날짜: "내일"→{tomorrow.strftime('%Y-%m-%d')}, "모레"→{day_after.strftime('%Y-%m-%d')}
