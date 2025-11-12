@@ -37,20 +37,13 @@ def extract_features(place: json, persona):
         print(f"key error | {e} in place: {place.get('name', 'Unknown')}")
         return np.zeros(20), 0, 0  # 수정: 3개 값 반환 (4개 아님)
 
-def recommend_topk(db, persona, candidate_names, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4):
+def recommend_topk(db, persona, candidate_names, category, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4):
     conn = sqlite3.connect(db)
     cur = conn.cursor()
-    if candidate_names:
-        print(candidate_names)
-        placeholders = ",".join(["?"] * len(candidate_names))
-        query = f"SELECT name, latitude, longitude, scores FROM places WHERE name IN ({placeholders})"
-        cur.execute(query, candidate_names)
-    else:
-        cur.execute("SELECT name, latitude, longitude, scores FROM places")
+    
+    cur.execute("SELECT name, latitude, longitude, scores FROM places")
     rows = cur.fetchall()
     conn.close()
-    if candidate_names:
-        print(f"✅ candidate_names {len(candidate_names)}개 중 {len(rows)}개 DB 매칭됨")
     scores_total = []
     def cos_similarity(A, B):
         return np.dot(A, B)/(np.linalg.norm(A)*np.linalg.norm(B))
@@ -67,6 +60,16 @@ def recommend_topk(db, persona, candidate_names, k=3, alpha=0.8, beta=0.7, gamma
             c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
             return R * c
     for name, latitude, longitude, scores in rows:
+        # 필터링
+        if category:
+            place_category = json.loads(scores)["placeFeatures"]["mainCategory"]
+            if place_category[category] < 0.5: 
+                # print(f"skip {name}, {category}: {place_category[category]}")
+                continue
+        
+        if candidate_names and name not in candidate_names:
+            # print(f"skip {name} (not in candidate names)")
+            continue
         scores_json = json.loads(scores)
         features, rating, price  = extract_features(scores_json, persona)
         distance = haversine_distance(persona_position, [latitude, longitude])

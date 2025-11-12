@@ -189,15 +189,15 @@ class PersonaService:
     def _handle_recommend_place(self, session: dict, intent: dict, user_id: str = None) -> dict:
         """장소 추천 처리"""
         specific_food = intent["extracted_data"]["food"]
-        # 유저가 원하는 특정한 음식이 있을 경우
-
+        category = intent["extracted_data"]["category"]        # 유저가 원하는 특정한 음식이 있을 경우
         print(f"\n{'='*60}")
         print(f"[RECOMMENDATION START]")
         print(f"   User ID: {user_id}")
         print(f"{'='*60}\n")
 
         # suggest_service를 통해 추천 장소 가져오기 (user_id 전달)
-        places = self.suggest_service.get_recommendations(user_id=user_id, specific_food=specific_food, k=5)
+        places = self.suggest_service.get_recommendations(
+            user_id=user_id, category=category, specific_food=specific_food, k=5)
 
         # 세션에 추천된 장소 저장 (장소 선택 시 사용)
         session["recommended_places"] = places
