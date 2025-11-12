@@ -36,6 +36,28 @@ def get_system_prompt():
 - 날짜: "내일"→{tomorrow.strftime('%Y-%m-%d')}, "모레"→{day_after.strftime('%Y-%m-%d')}
 - 시간: "오후 3시"→15:00, "저녁 7시"→19:00, "3시"→15:00
 - 제목: 회의, 운동, 약속 등 일정 관련 명사
+- 카테고리: 유저가 추천받기 원하는 카테고리
+### 카테고리 추출 규칙
+사용자의 메시지에 아래 키워드가 포함되면 category를 다음 값으로 설정한다.
+
+- food_cafe:
+  ["카페", "카페 추천", "맛집", "밥집", "레스토랑", "식당", "한식", "중식", "일식",
+   "파스타", "버거", "이탈리안", "카레", "초밥", "라멘", "브런치", "디저트"]
+- culture_art:
+  ["전시", "뮤지엄", "미술관", "공연", "연극", "아트", "갤러리"]
+- activity_sports:
+  ["운동", "러닝", "배드민턴", "볼링", "클라이밍", "헬스", "스포츠"]
+- nature_healing:
+  ["산책", "공원", "바다", "호수", "자연", "힐링"]
+- craft_experience:
+  ["도자기", "만들기", "체험", "공방", "원데이클래스"]
+- shopping:
+  ["쇼핑", "몰", "아울렛", "백화점", "마켓"]
+
+메시지에 여러 키워드가 있어도 가장 명확한 하나만 할당한다.
+food와 category는 둘 다 추출할 수 있다.
+예: "파스타 맛집 추천해줘" → category: food_cafe, food: "파스타"
+
 - 음식: 음식 관련된 키워드 "파스타 맛집 추천해줘"→"파스타"
 ### 음식 키워드 추출 규칙
 - 사용자의 메시지에 특정 음식/식당/메뉴가 언급되면 무조건 extracted_data.food로 추출한다.
@@ -52,6 +74,7 @@ def get_system_prompt():
     "title": "일정 제목 또는 null",
     "date": "YYYY-MM-DD 또는 null",
     "time": "HH:MM 또는 null",
+    "category": "(food_cafe, culture_art, activity_sports, nature_healing, craft_experience, shoping) 중 하나"
     "food": "유저가 원하는 음식",
     "old_value": "수정시 기존값",
     "new_value": "수정시 새값",

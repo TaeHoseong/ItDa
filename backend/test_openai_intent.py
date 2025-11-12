@@ -26,17 +26,17 @@ async def test_openai_intent():
 
     test_cases = [
         # 새로운 기능: 장소 추천
-        ("장소 추천해줘", "recommend_place"),
-        ("데이트 장소 알려줘", "recommend_place"),
-        ("어디 갈까?", "recommend_place"),
+        # ("장소 추천해줘", "recommend_place"),
+        # ("데이트 장소 알려줘", "recommend_place"),
+        # ("어디 갈까?", "recommend_place"),
         # 필터링
-        ("파스타 맛집 추천해줘", "recommend_place")
+        ("여자친구와 저녁 먹을 곳 추천해줘", "recommend_place")
         # 기존 기능: 일정 관리
-        ("내일 3시 회의", "create_schedule"),
-        ("일정 만들어줘", "update_info"),
+        # ("내일 3시 회의", "create_schedule"),
+        # ("일정 만들어줘", "update_info"),
 
-        # 기존 기능: 일반 대화
-        ("안녕", "general_chat"),
+        # # 기존 기능: 일반 대화
+        # ("안녕", "general_chat"),
     ]
 
     results = []
