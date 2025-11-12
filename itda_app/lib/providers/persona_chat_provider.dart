@@ -85,7 +85,7 @@ class PersonaChatProvider extends ChangeNotifier {
       String botMessage = response['message'] ?? '응답을 받지 못했어요';
 
       // 장소 추천 처리
-      if (response['action'] == 'recommend_place' &&
+      if ((response['action'] == 'recommend_place' || response['action'] == "re_recommend_place") &&
           response['data']?['places'] != null) {
         final places = response['data']['places'] as List<dynamic>;
         if (places.isNotEmpty) {

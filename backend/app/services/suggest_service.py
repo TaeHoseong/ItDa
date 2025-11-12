@@ -94,6 +94,7 @@ class SuggestService:
         return candidate_names
     def get_recommendations(
         self,
+        last_recommend=None,
         category: str = None,
         specific_food: str = None,
         persona: Optional[List[float]] = None,
@@ -160,6 +161,7 @@ class SuggestService:
             results = algorithm.recommend_topk(
                 db=self.db_path,
                 persona=persona,
+                last_recommend=last_recommend,
                 category=category,
                 candidate_names=candidates,
                 k=k,

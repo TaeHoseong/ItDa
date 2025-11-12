@@ -30,7 +30,7 @@ async def test_openai_intent():
         # ("데이트 장소 알려줘", "recommend_place"),
         # ("어디 갈까?", "recommend_place"),
         # 필터링
-        ("여자친구와 저녁 먹을 곳 추천해줘", "recommend_place")
+        ("추천해준 장소들이 맘에 안들어", "re_recommend_place")
         # 기존 기능: 일정 관리
         # ("내일 3시 회의", "create_schedule"),
         # ("일정 만들어줘", "update_info"),

@@ -68,6 +68,8 @@ class PersonaService:
 
         elif action == "recommend_place":
             response_data = self._handle_recommend_place(session, intent, request.user_id)
+        elif action == "re_recommend_place":
+            response_data = self._handle_re_recommend_place(session, intent, request.user_id)
         elif action == "select_place":
             response_data = await self._handle_select_place(session, intent)
         elif action == "view_schedule":
@@ -201,6 +203,8 @@ class PersonaService:
 
         # 세션에 추천된 장소 저장 (장소 선택 시 사용)
         session["recommended_places"] = places
+        session["last_category"] = category
+        session["last_food"] = specific_food
 
         # 터미널 로깅
         print(f"\n{'='*60}")
@@ -216,6 +220,30 @@ class PersonaService:
             "count": len(places)
         }
 
+    def _handle_re_recommend_place(self, session, intent, user_id):
+        """이전 추천을 기반으로 재추천"""
+
+        # 이전 추천에서 제외할 장소 리스트
+        prev_places = [p["name"] for p in session["recommended_places"]]
+
+        # 새 추천 가져오기
+        new_places = self.suggest_service.get_recommendations(
+            user_id=user_id,
+            last_recommend=prev_places,
+            category=session["last_category"],
+            specific_food=session["last_food"],
+            k=5
+        )
+        print(f"{[p["name"] for p in new_places]}")
+        # 세션 업데이트
+        session["recommended_places"].extend(new_places)
+
+        return {
+            "action_taken": "place_rerecommended",
+            "places": new_places,
+            "count": len(new_places)
+        }
+        
     async def _handle_select_place(self, session: dict, intent: dict) -> dict:
         """장소 선택 및 일정에 추가"""
 
