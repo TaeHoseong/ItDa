@@ -1,6 +1,7 @@
 # ItDa
 Places recommendation program for couple
 
+![Icon](itda.png)
 ## Project Overview
 
 ItDa is a couple-oriented place recommendation application consisting of:
