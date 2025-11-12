@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     # OpenAI
     OPENAI_API_KEY: str
     OPENAI_MODEL: str = "gpt-4o-mini"
-    OPENAI_TEMPERATURE: float = 0.3
+    OPENAI_TEMPERATURE: float = 0.2
     OPENAI_MAX_TOKENS: int = 500
 
     # CORS
