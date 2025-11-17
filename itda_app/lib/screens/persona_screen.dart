@@ -691,22 +691,65 @@ class _PlaceRecommendationCards extends StatelessWidget {
 }
 
 /// 데이트 코스 표시 위젯
-class _DateCourseDisplay extends StatelessWidget {
+class _DateCourseDisplay extends StatefulWidget {
   final DateCourse course;
 
   const _DateCourseDisplay({required this.course});
 
   @override
+  State<_DateCourseDisplay> createState() => _DateCourseDisplayState();
+}
+
+class _DateCourseDisplayState extends State<_DateCourseDisplay> {
+  @override
   Widget build(BuildContext context) {
     return DateCourseWidget(
-      course: course,
-      onAddToSchedule: () {
-        // TODO: 코스 전체를 일정에 추가하는 기능 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('코스 전체를 일정에 추가하는 기능은 개발 중입니다'),
-          ),
-        );
+      course: widget.course,
+      onAddToSchedule: () async {
+        final scheduleProvider = context.read<ScheduleProvider>();
+        final mapProvider = context.read<MapProvider>();
+        final navigationProvider = context.read<NavigationProvider>();
+
+        try {
+          // 코스의 날짜 파싱 (YYYY-MM-DD 형식)
+          final date = DateTime.parse(widget.course.date);
+
+          // 각 슬롯을 일정으로 추가
+          for (final slot in widget.course.slots) {
+            await scheduleProvider.createScheduleWithBackend(
+              day: date,
+              title: slot.placeName,
+              time: slot.startTime,
+              placeName: slot.placeName,
+              latitude: slot.latitude,
+              longitude: slot.longitude,
+              address: slot.placeAddress,
+            );
+          }
+
+          // 지도에 코스 경로 표시
+          mapProvider.setCourseRoute(widget.course);
+          debugPrint('✅ 데이트 코스를 지도에 표시했습니다');
+
+          // 지도 탭으로 이동
+          navigationProvider.setIndex(1);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ ${widget.course.slots.length}개 일정이 추가되었습니다!'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ 일정 추가 실패: $e'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       },
     );
   }
