@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/persona_message.dart';
+import '../models/date_course.dart';
 import '../services/persona_api_service.dart';
 import 'schedule_provider.dart';
 
@@ -20,10 +21,14 @@ class PersonaChatProvider extends ChangeNotifier {
   /// 마지막 메시지가 추천 의도였는지 플래그
   bool _lastMessageWasRecommendation = false;
 
+  /// 생성된 데이트 코스
+  DateCourse? _lastGeneratedCourse;
+
   List<PersonaMessage> get messages => List.unmodifiable(_messages);
   bool get isSending => _isSending;
   List<Map<String, dynamic>>? get lastRecommendedPlaces => _lastRecommendedPlaces;
   bool get shouldShowPlaceCards => _lastMessageWasRecommendation && _lastRecommendedPlaces != null && _lastRecommendedPlaces!.isNotEmpty;
+  DateCourse? get lastGeneratedCourse => _lastGeneratedCourse;
 
   /// 일정 생성 응답 (UI에서 SnackBar 띄우고 소비)
   Map<String, dynamic>? takeLastScheduleCreated() {
@@ -115,6 +120,21 @@ class PersonaChatProvider extends ChangeNotifier {
       } else {
         // 추천이 아닌 다른 액션이면 플래그 초기화
         _lastMessageWasRecommendation = false;
+      }
+
+      // 데이트 코스 생성 처리
+      if (response['action'] == 'generate_course' &&
+          response['data']?['course'] != null) {
+        try {
+          final courseData = response['data']['course'] as Map<String, dynamic>;
+          _lastGeneratedCourse = DateCourse.fromJson(courseData);
+          debugPrint('✅ 데이트 코스 생성됨: ${_lastGeneratedCourse!.slots.length}개 슬롯');
+        } catch (e) {
+          debugPrint('❌ 코스 파싱 오류: $e');
+        }
+      } else {
+        // 코스 생성이 아니면 초기화
+        _lastGeneratedCourse = null;
       }
 
       // 일정 생성 처리 → 백엔드에 저장

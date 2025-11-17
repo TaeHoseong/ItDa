@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
 import './schedule_provider.dart';
+import '../models/date_course.dart';
 
 class MapMarker {
   final String id;
@@ -24,11 +25,18 @@ class MapProvider extends ChangeNotifier {
   bool _hasPendingMove = false;  // 지도 탭 진입 시 이동 대기 플래그
   final List<MapMarker> _markers = [];
 
+  // 데이트 코스 경로
+  List<NLatLng>? _courseRoute;
+  List<CourseSlot>? _courseSlots;
+
   bool get isInitialized => _initialized;
   NLatLng get cameraTarget => _cameraTarget;
   double get zoom => _zoom;
   bool get hasPendingMove => _hasPendingMove;
   List<MapMarker> get markers => List.unmodifiable(_markers);
+  List<NLatLng>? get courseRoute => _courseRoute;
+  List<CourseSlot>? get courseSlots => _courseSlots;
+  bool get hasCourseRoute => _courseRoute != null && _courseRoute!.isNotEmpty;
 
   /// 최초 1회 마커/상태 세팅
   void ensureInitialized() {
@@ -98,6 +106,53 @@ class MapProvider extends ChangeNotifier {
     _hasPendingMove = false;
     if (kDebugMode) {
       print('MapProvider: 카메라 이동 완료, 플래그 초기화');
+    }
+  }
+
+  /// 데이트 코스 경로 설정
+  void setCourseRoute(DateCourse course) {
+    _courseRoute = course.slots.map((slot) =>
+      NLatLng(slot.latitude, slot.longitude)
+    ).toList();
+    _courseSlots = course.slots;
+
+    // 코스 슬롯 마커 추가 (기존 마커와 구분)
+    _markers.removeWhere((m) => m.id.startsWith('course_'));
+
+    for (int i = 0; i < course.slots.length; i++) {
+      final slot = course.slots[i];
+      _markers.add(
+        MapMarker(
+          id: 'course_${i}',
+          position: NLatLng(slot.latitude, slot.longitude),
+          caption: '${i + 1}. ${slot.placeName}',
+        ),
+      );
+    }
+
+    // 첫 번째 슬롯으로 카메라 이동
+    if (_courseRoute!.isNotEmpty) {
+      _cameraTarget = _courseRoute!.first;
+      _zoom = 13.0;
+      _hasPendingMove = true;
+    }
+
+    notifyListeners();
+
+    if (kDebugMode) {
+      print('MapProvider: 코스 경로 설정 완료 (${_courseRoute!.length}개 지점)');
+    }
+  }
+
+  /// 데이트 코스 경로 초기화
+  void clearCourseRoute() {
+    _courseRoute = null;
+    _courseSlots = null;
+    _markers.removeWhere((m) => m.id.startsWith('course_'));
+    notifyListeners();
+
+    if (kDebugMode) {
+      print('MapProvider: 코스 경로 초기화');
     }
   }
 }

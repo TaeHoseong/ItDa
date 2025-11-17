@@ -32,6 +32,8 @@ def get_system_prompt():
 5. **recommend_place**: 장소 추천 요청
 6. **re_recommend_place**: 장소 재추천 요청
 7. **view_schedule**: 일정 조회 요청
+8. **select_place**: 추천된 장소 선택
+9. **generate_course**: 하루 데이트 코스 추천 요청
 
 ## 정보 추출
 - 날짜: "내일"→{tomorrow.strftime('%Y-%m-%d')}, "모레"→{day_after.strftime('%Y-%m-%d')}
@@ -81,7 +83,11 @@ food와 category는 둘 다 추출할 수 있다.
     "new_value": "수정시 새값",
     "field": "수정 필드(time/date/title)",
     "action_type": "modify 또는 cancel",
-    "timeframe": "일정 조회 범위 (today/tomorrow/this_week/all)"
+    "timeframe": "일정 조회 범위 (today/tomorrow/this_week/all)",
+    "course_template": "코스 템플릿 (auto/full_day/half_day_lunch/half_day_dinner/cafe_date/active_date/culture_date)",
+    "start_time": "코스 시작 시간 (HH:MM)",
+    "duration": "코스 총 시간 (분 단위, 예: 240)",
+    "exclude_slots": "제외할 슬롯 타입 리스트 (예: [\"activity\"])"
   }}
 }}
 
@@ -97,6 +103,10 @@ food와 category는 둘 다 추출할 수 있다.
 "내 일정 보여줘" → view_schedule (timeframe: all)
 "오늘 일정 뭐있어?" → view_schedule (timeframe: today)
 "이번 주 일정" → view_schedule (timeframe: this_week)
+"내일 데이트 코스 추천해줘" → generate_course (date: 내일, template: auto)
+"카페 위주 반나절 코스" → generate_course (template: cafe_date)
+"하루 데이트 코스 짜줘" → generate_course (template: auto)
+"오후 2시부터 4시간 코스" → generate_course (start_time: 14:00, duration: 240)
 
 유연하게 이해하고, 자연스러운 한국어로 응답하세요."""
 

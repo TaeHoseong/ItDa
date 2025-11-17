@@ -18,6 +18,7 @@ class _MapScreenState extends State<MapScreen> {
   List<String> _currentMarkerIds = [];
   bool _isSyncing = false;
   bool _isProgrammaticMove = false;
+  NPolylineOverlay? _coursePolyline;
 
   @override
   void initState() {
@@ -67,6 +68,35 @@ class _MapScreenState extends State<MapScreen> {
     debugPrint('마커 클릭: ${marker.id}');
   }
 
+  /// 코스 경로 폴리라인 추가
+  Future<void> _addCoursePolyline(
+      NaverMapController controller, List<NLatLng> route) async {
+    try {
+      // 새 폴리라인 생성
+      final polyline = NPolylineOverlay(
+        id: 'course_route',
+        coords: route,
+        color: const Color(0xFFFF6B9D), // 핑크색
+        width: 5,
+      );
+
+      await controller.addOverlay(polyline);
+      _coursePolyline = polyline;
+      debugPrint('🗺️ 코스 경로 폴리라인 추가 완료 (${route.length}개 지점)');
+    } catch (e) {
+      debugPrint('❌ 폴리라인 추가 오류: $e');
+    }
+  }
+
+  /// 코스 경로 폴리라인 제거
+  Future<void> _removeCoursePolyline(NaverMapController controller) async {
+    if (_coursePolyline != null) {
+      await controller.deleteOverlay(_coursePolyline!.info);
+      _coursePolyline = null;
+      debugPrint('🗺️ 코스 경로 폴리라인 제거 완료');
+    }
+  }
+
   void _moveCameraToTarget(MapProvider mapProvider) {
     final controller = _mapController;
     if (controller == null) return;
@@ -108,9 +138,15 @@ class _MapScreenState extends State<MapScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         // 기존 마커 제거
         await controller.clearOverlays();
+        _coursePolyline = null; // 폴리라인 참조 초기화
 
         // 새 마커 추가
         await _addMarkersToMap(controller, mapProvider.markers);
+
+        // 코스 경로가 있으면 폴리라인 추가
+        if (mapProvider.hasCourseRoute) {
+          await _addCoursePolyline(controller, mapProvider.courseRoute!);
+        }
 
         _currentMarkerIds = newMarkerIds;
         _isSyncing = false;
@@ -134,10 +170,40 @@ class _MapScreenState extends State<MapScreen> {
     final mapProvider = context.watch<MapProvider>();
     final navigationProvider = context.watch<NavigationProvider>();
 
-    if (navigationProvider.currentIndex == 1 && mapProvider.hasPendingMove) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _moveCameraToTarget(mapProvider);
-      });
+    // 지도 탭으로 이동했을 때 pending된 작업 실행
+    if (navigationProvider.currentIndex == 1) {
+      if (mapProvider.hasPendingMove) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _moveCameraToTarget(mapProvider);
+        });
+      }
+
+      // 코스 경로가 새로 생성되었으면 마커 + 폴리라인 그리기
+      if (mapProvider.hasCourseRoute && _mapController != null) {
+        final newMarkerIds = mapProvider.markers.map((m) => m.id).toList();
+
+        // 코스 마커가 아직 지도에 없으면 추가
+        if (!_isSameMarkerList(_currentMarkerIds, newMarkerIds)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            if (!_isSyncing) {
+              _isSyncing = true;
+
+              // 기존 오버레이 모두 제거
+              await _mapController!.clearOverlays();
+              _coursePolyline = null; // 폴리라인 참조 초기화
+
+              // 모든 마커 추가 (일정 마커 + 코스 마커)
+              await _addMarkersToMap(_mapController!, mapProvider.markers);
+
+              // 폴리라인 추가
+              await _addCoursePolyline(_mapController!, mapProvider.courseRoute!);
+
+              _currentMarkerIds = newMarkerIds;
+              _isSyncing = false;
+            }
+          });
+        }
+      }
     }
 
     return Scaffold(
