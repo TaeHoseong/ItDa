@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/persona_message.dart';
+import '../models/date_course.dart';
 import '../providers/persona_chat_provider.dart';
 import '../providers/schedule_provider.dart';
 import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../widgets/date_course_widget.dart';
 
 class PersonaScreen extends StatefulWidget {
   const PersonaScreen({
@@ -243,6 +245,13 @@ class _ChatList extends StatelessWidget {
               const SizedBox(height: 12),
               _PlaceRecommendationCards(
                 places: chatProvider.lastRecommendedPlaces!,
+              ),
+            ],
+            // 데이트 코스 표시
+            if (isLastBotMessage && chatProvider.lastGeneratedCourse != null) ...[
+              const SizedBox(height: 12),
+              _DateCourseDisplay(
+                course: chatProvider.lastGeneratedCourse!,
               ),
             ],
           ],
@@ -677,6 +686,28 @@ class _PlaceRecommendationCards extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 데이트 코스 표시 위젯
+class _DateCourseDisplay extends StatelessWidget {
+  final DateCourse course;
+
+  const _DateCourseDisplay({required this.course});
+
+  @override
+  Widget build(BuildContext context) {
+    return DateCourseWidget(
+      course: course,
+      onAddToSchedule: () {
+        // TODO: 코스 전체를 일정에 추가하는 기능 
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('코스 전체를 일정에 추가하는 기능은 개발 중입니다'),
+          ),
+        );
+      },
     );
   }
 }
