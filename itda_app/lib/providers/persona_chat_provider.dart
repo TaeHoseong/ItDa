@@ -86,6 +86,11 @@ class PersonaChatProvider extends ChangeNotifier {
       debugPrint('전송: $text (userId: $userId)');
       final response = await _apiService.sendMessage(text, userId: userId);
 
+      debugPrint('📥 백엔드 응답: action=${response['action']}, message=${response['message']}');
+      if (response['data'] != null) {
+        debugPrint('   data keys: ${response['data'].keys}');
+      }
+
       // 기본 봇 메시지
       String botMessage = response['message'] ?? '응답을 받지 못했어요';
 
@@ -132,8 +137,20 @@ class PersonaChatProvider extends ChangeNotifier {
         } catch (e) {
           debugPrint('❌ 코스 파싱 오류: $e');
         }
-      } else {
-        // 코스 생성이 아니면 초기화
+      } else if (response['action'] == 'regenerate_course_slot' &&
+          response['data']?['course'] != null) {
+        // 슬롯 재생성 처리
+        try {
+          final courseData = response['data']['course'] as Map<String, dynamic>;
+          _lastGeneratedCourse = DateCourse.fromJson(courseData);
+          debugPrint('✅ 슬롯 재생성됨: ${response['data']?['slot_index']}번');
+        } catch (e) {
+          debugPrint('❌ 슬롯 재생성 파싱 오류: $e');
+        }
+      } else if (response['action'] != 'recommend_place' &&
+                 response['action'] != 're_recommend_place' &&
+                 response['action'] != 'select_place') {
+        // 코스/장소 관련 액션이 아니면 초기화
         _lastGeneratedCourse = null;
       }
 

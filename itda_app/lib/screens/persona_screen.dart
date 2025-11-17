@@ -705,6 +705,12 @@ class _DateCourseDisplayState extends State<_DateCourseDisplay> {
   Widget build(BuildContext context) {
     return DateCourseWidget(
       course: widget.course,
+      onRegenerateSlot: (slotIndex) async {
+        final chatProvider = context.read<PersonaChatProvider>();
+        // 슬롯 번호는 0-based이지만 사용자에게는 1-based로 표시
+        final message = '${slotIndex + 1}번 슬롯 다른 장소로';
+        await chatProvider.sendUserMessage(message);
+      },
       onAddToSchedule: () async {
         final scheduleProvider = context.read<ScheduleProvider>();
         final mapProvider = context.read<MapProvider>();

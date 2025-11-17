@@ -79,11 +79,20 @@ class PersonaService:
             response_data = self._handle_view_schedule(session, intent, request.user_id)
         elif action == "generate_course":
             response_data = self._handle_generate_course(session, intent, request.user_id)
+        elif action == "regenerate_course_slot":
+            print(f"\n[ACTION] Calling _handle_regenerate_course_slot")
+            response_data = self._handle_regenerate_course_slot(session, intent, request.user_id)
+            print(f"[ACTION] Response data keys: {response_data.keys() if response_data else None}")
 
         # improved_message가 있으면 그걸 사용, 없으면 intent["message"] 사용
         final_message = intent["message"]
         if response_data and "improved_message" in response_data:
             final_message = response_data["improved_message"]
+            print(f"[DEBUG] Using improved_message: {final_message[:50]}...")
+        else:
+            print(f"[DEBUG] Using intent message: {final_message[:50]}...")
+            if response_data:
+                print(f"[DEBUG] response_data keys: {response_data.keys()}")
 
         return ChatResponse(
             message=final_message,
@@ -560,4 +569,112 @@ class PersonaService:
             return {
                 "action_taken": "error",
                 "message": f"코스 생성 중 오류가 발생했습니다: {str(e)}"
+            }
+
+    def _handle_regenerate_course_slot(self, session: dict, intent: dict, user_id: str = None) -> dict:
+        """코스의 특정 슬롯 재생성 처리"""
+
+        # 세션에 저장된 코스 확인
+        if "generated_course" not in session:
+            return {
+                "action_taken": "error",
+                "message": "재생성할 코스가 없습니다. 먼저 코스를 생성해주세요."
+            }
+
+        if not user_id:
+            return {
+                "action_taken": "error",
+                "message": "로그인이 필요합니다."
+            }
+
+        extracted = intent.get("extracted_data", {})
+        slot_index = extracted.get("slot_index")
+
+        if slot_index is None:
+            return {
+                "action_taken": "error",
+                "message": "재생성할 슬롯 번호를 지정해주세요. (예: '1번 슬롯 다른 장소로')"
+            }
+
+        # slot_index는 1부터 시작하는 사용자 입력을 0-based로 변환
+        slot_index = int(slot_index) - 1
+
+        print(f"\n{'='*60}")
+        print(f"[REGENERATE SLOT] #{slot_index}")
+        print(f"{'='*60}\n")
+
+        try:
+            course = session["generated_course"]
+
+            # CourseService를 통해 슬롯 재생성
+            updated_course = self.course_service.regenerate_course_slot(
+                course=course,
+                slot_index=slot_index,
+                user_id=user_id
+            )
+
+            # 세션에 업데이트된 코스 저장
+            session["generated_course"] = updated_course
+
+            # 변경된 슬롯 정보
+            new_slot = updated_course.slots[slot_index]
+
+            # 응답 메시지
+            message = f"✅ {slot_index + 1}번 슬롯을 다른 장소로 변경했어요!\n\n"
+            message += f"{new_slot.emoji} [{new_slot.start_time}] {new_slot.place_name}"
+            if new_slot.place_address:
+                message += f"\n📍 {new_slot.place_address}"
+            if new_slot.rating:
+                message += f"\n⭐ 평점: {new_slot.rating}"
+
+            # 코스 전체 데이터도 함께 반환
+            course_data = {
+                "date": updated_course.date,
+                "template": updated_course.template,
+                "start_time": updated_course.start_time,
+                "end_time": updated_course.end_time,
+                "total_distance": updated_course.total_distance,
+                "total_duration": updated_course.total_duration,
+                "slots": [
+                    {
+                        "slot_type": s.slot_type,
+                        "emoji": s.emoji,
+                        "start_time": s.start_time,
+                        "duration": s.duration,
+                        "place_name": s.place_name,
+                        "place_address": s.place_address,
+                        "latitude": s.latitude,
+                        "longitude": s.longitude,
+                        "rating": s.rating,
+                        "score": s.score,
+                        "distance_from_previous": s.distance_from_previous
+                    }
+                    for s in updated_course.slots
+                ]
+            }
+
+            print(f"\n[SUCCESS] Slot regenerated successfully")
+            print(f"   Returning improved_message: {message[:80]}...")
+
+            return {
+                "action_taken": "slot_regenerated",
+                "slot_index": slot_index,
+                "improved_message": message,
+                "course": course_data
+            }
+
+        except ValueError as e:
+            print(f"[ERROR] ValueError in regenerate: {e}")
+            return {
+                "action_taken": "error",
+                "message": f"잘못된 슬롯 번호입니다: {str(e)}"
+            }
+        except Exception as e:
+            print(f"[ERROR] Failed to regenerate slot: {e}")
+            import traceback
+            traceback.print_exc()
+
+            return {
+                "action_taken": "error",
+                "message": f"슬롯 재생성 중 오류가 발생했습니다: {str(e)}"
             }
