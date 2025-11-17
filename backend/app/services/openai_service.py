@@ -34,6 +34,7 @@ def get_system_prompt():
 7. **view_schedule**: 일정 조회 요청
 8. **select_place**: 추천된 장소 선택
 9. **generate_course**: 하루 데이트 코스 추천 요청
+10. **regenerate_course_slot**: 코스의 특정 슬롯 재생성 (예: "1번 슬롯 다른 장소로", "카페 다른 곳으로")
 
 ## 정보 추출
 - 날짜: "내일"→{tomorrow.strftime('%Y-%m-%d')}, "모레"→{day_after.strftime('%Y-%m-%d')}
@@ -87,7 +88,8 @@ food와 category는 둘 다 추출할 수 있다.
     "course_template": "코스 템플릿 (auto/full_day/half_day_lunch/half_day_dinner/cafe_date/active_date/culture_date)",
     "start_time": "코스 시작 시간 (HH:MM)",
     "duration": "코스 총 시간 (분 단위, 예: 240)",
-    "exclude_slots": "제외할 슬롯 타입 리스트 (예: [\"activity\"])"
+    "exclude_slots": "제외할 슬롯 타입 리스트 (예: [\"activity\"])",
+    "slot_index": "재생성할 슬롯 번호 (1부터 시작, 예: 1, 2, 3)"
   }}
 }}
 
@@ -98,6 +100,9 @@ food와 category는 둘 다 추출할 수 있다.
 "내일 일정 취소" → update_schedule (취소)
 "장소 추천해줘" → recommend_place (장소 추천)
 "파스타 맛집 추천해줘" → recommend_place (장소 추천)
+"내일 데이트 코스 추천해줘" → generate_course
+"1번 슬롯 다른 장소로" → regenerate_course_slot (slot_index: 1)
+"카페 다른 곳으로" → regenerate_course_slot (slot_index를 카페 슬롯 번호로 추출)
 "데이트 장소 알려줘" → recommend_place (장소 추천)
 "어디 갈까?" → recommend_place (장소 추천)
 "내 일정 보여줘" → view_schedule (timeframe: all)

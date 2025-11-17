@@ -381,3 +381,112 @@ class CourseService:
         dt = datetime.strptime(time_str, "%H:%M")
         adjusted = dt + timedelta(minutes=minutes)
         return adjusted.strftime("%H:%M")
+
+    def regenerate_course_slot(
+        self,
+        course: DateCourse,
+        slot_index: int,
+        user_id: str = None
+    ) -> DateCourse:
+        """
+        코스의 특정 슬롯만 재생성
+
+        Args:
+            course: 기존 데이트 코스
+            slot_index: 재생성할 슬롯 인덱스 (0부터 시작)
+            user_id: 사용자 ID (페르소나 기반 추천용)
+
+        Returns:
+            DateCourse: 슬롯이 교체된 새로운 코스
+        """
+        if slot_index < 0 or slot_index >= len(course.slots):
+            raise ValueError(f"Invalid slot_index: {slot_index}")
+
+        print(f"\n{'='*60}")
+        print(f"[REGENERATE] Slot #{slot_index} in {course.template} course")
+        print(f"{'='*60}")
+
+        # 기존 슬롯 정보
+        old_slot = course.slots[slot_index]
+
+        # 슬롯 설정 재구성
+        slot_config = {
+            "slot_type": old_slot.slot_type,
+            "category": old_slot.category,  # 기존 슬롯의 category 사용
+            "start_time": old_slot.start_time,
+            "duration": old_slot.duration,
+            "emoji": old_slot.emoji,
+        }
+
+        # 이미 사용된 장소들 (현재 슬롯 포함 - 같은 장소가 다시 나오지 않도록)
+        exclude_places = [s.place_name for s in course.slots]
+        print(f"   Excluding ALL current places: {exclude_places}")
+
+        # 이전 위치 (이전 슬롯이 있으면)
+        previous_location = None
+        if slot_index > 0:
+            prev_slot = course.slots[slot_index - 1]
+            previous_location = (prev_slot.latitude, prev_slot.longitude)
+
+        # 새로운 장소 추천
+        new_slot = self._recommend_for_slot(
+            user_id=user_id,
+            slot_config=slot_config,
+            previous_location=previous_location,
+            exclude_places=exclude_places
+        )
+
+        if not new_slot:
+            raise RuntimeError(f"Failed to find alternative place for slot #{slot_index}")
+
+        # 다음 슬롯 거리 재계산
+        if slot_index < len(course.slots) - 1:
+            next_slot = course.slots[slot_index + 1]
+            new_distance = self._calculate_distance(
+                new_slot.latitude, new_slot.longitude,
+                next_slot.latitude, next_slot.longitude
+            )
+            # next_slot은 immutable이므로 새로 생성
+            course.slots[slot_index + 1] = CourseSlot(
+                slot_type=next_slot.slot_type,
+                category=next_slot.category,
+                emoji=next_slot.emoji,
+                start_time=next_slot.start_time,
+                duration=next_slot.duration,
+                place_name=next_slot.place_name,
+                place_address=next_slot.place_address,
+                latitude=next_slot.latitude,
+                longitude=next_slot.longitude,
+                rating=next_slot.rating,
+                score=next_slot.score,
+                distance_from_previous=new_distance
+            )
+
+        # 슬롯 교체
+        course.slots[slot_index] = new_slot
+
+        # 총 거리 재계산
+        course.total_distance = sum(
+            s.distance_from_previous for s in course.slots
+            if s.distance_from_previous is not None
+        )
+
+        print(f"\n✅ Slot #{slot_index} regenerated:")
+        print(f"   Old: {old_slot.place_name}")
+        print(f"   New: {new_slot.place_name} (score: {new_slot.score:.2f})")
+
+        return course
+
+    def _infer_category_from_slot_type(self, slot_type: str) -> str:
+        """슬롯 타입으로부터 카테고리 추론"""
+        mapping = {
+            "lunch": "food_cafe",
+            "dinner": "food_cafe",
+            "cafe": "food_cafe",
+            "dessert": "food_cafe",
+            "activity": "activity_sports",
+            "walk": "nature_healing",
+            "night_view": "nature_healing",
+            "exhibition": "culture_art",
+        }
+        return mapping.get(slot_type, "food_cafe")

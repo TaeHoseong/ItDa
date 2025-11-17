@@ -5,11 +5,13 @@ import '../models/date_course.dart';
 class DateCourseWidget extends StatelessWidget {
   final DateCourse course;
   final VoidCallback? onAddToSchedule;
+  final Function(int slotIndex)? onRegenerateSlot;
 
   const DateCourseWidget({
     Key? key,
     required this.course,
     this.onAddToSchedule,
+    this.onRegenerateSlot,
   }) : super(key: key);
 
   @override
@@ -35,7 +37,7 @@ class DateCourseWidget extends StatelessWidget {
               final slot = entry.value;
               final isLast = index == course.slots.length - 1;
 
-              return _buildTimelineItem(context, slot, isLast);
+              return _buildTimelineItem(context, index, slot, isLast);
             }).toList(),
 
             const SizedBox(height: 16),
@@ -131,7 +133,7 @@ class DateCourseWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildTimelineItem(BuildContext context, CourseSlot slot, bool isLast) {
+  Widget _buildTimelineItem(BuildContext context, int slotIndex, CourseSlot slot, bool isLast) {
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,6 +235,26 @@ class DateCourseWidget extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ),
+                  ],
+
+                  // 재생성 버튼
+                  if (onRegenerateSlot != null) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 32,
+                      child: OutlinedButton.icon(
+                        onPressed: () => onRegenerateSlot!(slotIndex),
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text(
+                          '다른 장소',
+                          style: TextStyle(fontSize: 12),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          side: BorderSide(color: Colors.grey[400]!),
+                        ),
+                      ),
                     ),
                   ],
                 ],
