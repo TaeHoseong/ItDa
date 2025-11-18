@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from app.core.supabase_client import get_supabase
 from app.core.security import verify_token
 from app.models.user import User
-from app.schemas.user import UserPersonaUpdate, UserResponse
+from app.schemas.user import UserResponse, SurveyUpdate
+from app.services.user_service import UserService
 from jose import JWTError
 
 
@@ -81,76 +82,66 @@ async def get_current_user_info(
         user_id=current_user["user_id"],
         email=current_user["email"],
         name=current_user["name"],
+        picture=current_user["picture"],
+        nickname=current_user["nickname"],
+        birthday=current_user["birthday"],
+        gender=current_user["gender"],
+        couple_id=current_user["couple_id"],
         survey_done=current_user.get("survey_done", False)
     )
 
 
-@router.put("/persona", response_model=UserResponse, status_code=status.HTTP_200_OK)
-async def update_persona(
-    persona: UserPersonaUpdate,
+@router.put("/survey", response_model=UserResponse, status_code=status.HTTP_200_OK)
+async def submit_survey(
+    survey_data: SurveyUpdate,
     current_user: User = Depends(get_current_user),
 ):
     """
-    Update user persona (survey results)
+    Submit or re-submit user survey (updates persona)
+
+    This endpoint allows users to submit their survey results (20 persona dimensions)
+    for the first time or re-submit to update their preferences.
 
     Args:
-        persona: UserPersonaUpdate containing 20 dimension values
+        survey_data: SurveyUpdate containing 20 dimension values
         current_user: Authenticated user from JWT
 
     Returns:
         UserResponse with updated user info
 
     Raises:
+        HTTPException 404: If user not found
         HTTPException 500: If database operation fails
     """
     supabase = get_supabase()
     try:
-        features_vector = [
-            persona.food_cafe,
-            persona.culture_art,
-            persona.activity_sports,
-            persona.nature_healing,
-            persona.craft_experience,
-            persona.shopping,
+        user_service = UserService(db)
 
-            persona.quiet,
-            persona.romantic,
-            persona.trendy,
-            persona.private_vibe,
-            persona.artistic,
-            persona.energetic,
+        # Update persona using service layer
+        updated_user = user_service.update_persona(current_user.user_id, survey_data)
 
-            persona.passive_enjoyment,
-            persona.active_participation,
-            persona.social_bonding,
-            persona.relaxation_focused,
-
-            persona.indoor_ratio,
-            persona.crowdedness_expected,
-            persona.photo_worthiness,
-            persona.scenic_view,
-        ]
-        response = (
-            supabase.table("users")
-            .update({
-                "features": features_vector,
-                "survey_done": True
-            })
-            .eq("user_id", current_user["user_id"])
-            .execute()
-        )
-        
-        updated_user = response.data[0]
+        if not updated_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
 
         return UserResponse(
-            user_id=updated_user["user_id"],
-            email=updated_user["email"],
-            name=updated_user["name"],
-            survey_done=updated_user["survey_done"]
+            user_id=updated_user.user_id,
+            email=updated_user.email,
+            name=updated_user.name,
+            picture=updated_user.picture,
+            nickname=updated_user.nickname,
+            birthday=updated_user.birthday,
+            gender=updated_user.gender,
+            couple_id=updated_user.couple_id,
+            survey_done=updated_user.survey_done
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update persona: {str(e)}"
+            detail=f"Failed to update survey: {str(e)}"
         )

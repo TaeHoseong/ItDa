@@ -96,3 +96,73 @@ class DateCourse(BaseModel):
                 "updated_at": "2025-11-19T10:30:00"
             }
         }
+
+
+# ========== Phase 10.4: CRUD Schemas ==========
+
+class CourseCreate(BaseModel):
+    """코스 생성 요청 (Phase 10.4)"""
+    date: str  # "YYYY-MM-DD"
+    template: str  # full_day, half_day_lunch, cafe_date 등
+    slots: List[Dict]  # CourseSlot 리스트 (JSON 형태)
+    total_distance: float = 0.0
+    total_duration: int = 0
+    start_time: str  # "HH:MM"
+    end_time: str  # "HH:MM"
+    couple_id: Optional[str] = None  # 커플 ID (옵션)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "date": "2025-11-20",
+                "template": "cafe_date",
+                "slots": [
+                    {
+                        "slot_type": "cafe",
+                        "category": "food_cafe",
+                        "start_time": "14:00",
+                        "duration": 90,
+                        "emoji": "☕",
+                        "place_name": "스타벅스 송도점",
+                        "latitude": 37.123,
+                        "longitude": 126.456,
+                        "rating": 4.5,
+                        "score": 0.92
+                    }
+                ],
+                "total_distance": 0.0,
+                "total_duration": 90,
+                "start_time": "14:00",
+                "end_time": "15:30"
+            }
+        }
+
+
+class CourseUpdate(BaseModel):
+    """코스 수정 요청 (Phase 10.4)"""
+    date: Optional[str] = None
+    template: Optional[str] = None
+    slots: Optional[List[Dict]] = None
+    total_distance: Optional[float] = None
+    total_duration: Optional[int] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+
+
+class CourseResponse(BaseModel):
+    """코스 응답 (Phase 10.4)"""
+    course_id: str
+    user_id: str
+    couple_id: Optional[str] = None
+    date: str
+    template: str
+    slots: List[Dict]
+    total_distance: float
+    total_duration: int
+    start_time: str
+    end_time: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

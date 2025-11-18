@@ -12,6 +12,14 @@ class User(Base):
     name = Column(String, nullable=True)
     picture = Column(String, nullable=True)  # Profile picture URL
 
+    # Additional user info (Phase 10.2)
+    nickname = Column(String, unique=True, nullable=True, index=True)  # 사용자 닉네임
+    birthday = Column(String, nullable=True)  # YYYY-MM-DD 형식
+    gender = Column(String, nullable=True)  # "male" or "female"
+
+    # Couple relationship (Phase 10.3)
+    couple_id = Column(String, nullable=True, index=True)  # 매칭된 커플 ID
+
     # Main Category (6 dimensions)
     food_cafe = Column(Float, default=0.0, nullable=False)
     culture_art = Column(Float, default=0.0, nullable=False)
@@ -41,6 +49,6 @@ class User(Base):
     scenic_view = Column(Float, default=0.0, nullable=False)
 
     # Metadata
-    persona_completed = Column(Boolean, default=False, nullable=False)
+    survey_done = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
