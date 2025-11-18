@@ -5,12 +5,16 @@ from app.services.openai_service import analyze_intent
 from app.services.schedule_service import ScheduleService
 from app.services.suggest_service import SuggestService
 from app.core.supabase_client import get_supabase
+from app.services.course_service import CourseService
+from app.schemas.course import CoursePreferences
+from sqlalchemy.orm import Session
 
 class PersonaService:
     def __init__(self, sessions: Dict):
         self.sessions = sessions
         self.supabase = get_supabase()
         self.suggest_service = SuggestService()
+        self.course_service = CourseService()
 
     async def process_message(self, request: ChatRequest) -> ChatResponse:
         """사용자 메시지 처리"""
@@ -74,11 +78,22 @@ class PersonaService:
             response_data = await self._handle_select_place(session, intent)
         elif action == "view_schedule":
             response_data = self._handle_view_schedule(session, intent, request.user_id)
+        elif action == "generate_course":
+            response_data = self._handle_generate_course(session, intent, request.user_id)
+        elif action == "regenerate_course_slot":
+            print(f"\n[ACTION] Calling _handle_regenerate_course_slot")
+            response_data = self._handle_regenerate_course_slot(session, intent, request.user_id)
+            print(f"[ACTION] Response data keys: {response_data.keys() if response_data else None}")
 
         # improved_message가 있으면 그걸 사용, 없으면 intent["message"] 사용
         final_message = intent["message"]
         if response_data and "improved_message" in response_data:
             final_message = response_data["improved_message"]
+            print(f"[DEBUG] Using improved_message: {final_message[:50]}...")
+        else:
+            print(f"[DEBUG] Using intent message: {final_message[:50]}...")
+            if response_data:
+                print(f"[DEBUG] response_data keys: {response_data.keys()}")
 
         return ChatResponse(
             message=final_message,
@@ -440,3 +455,227 @@ class PersonaService:
             result["improved_message"] = formatted_message
 
         return result
+
+    def _handle_generate_course(self, session: dict, intent: dict, user_id: str = None) -> dict:
+        """데이트 코스 생성 처리"""
+
+        # pending_data 초기화
+        session["pending_data"] = {}
+
+        if not user_id:
+            return {
+                "action_taken": "error",
+                "message": "로그인이 필요합니다."
+            }
+
+        extracted = intent.get("extracted_data", {})
+
+        # 날짜 추출 (기본값: 오늘)
+        date_str = extracted.get("date")
+        if not date_str:
+            date_str = datetime.now().strftime("%Y-%m-%d")
+
+        # 템플릿 추출 (기본값: auto - 페르소나 기반)
+        template = extracted.get("course_template", "auto")
+
+        # 사용자 커스터마이징 설정
+        preferences = None
+        start_time = extracted.get("start_time")
+        duration = extracted.get("duration")
+        exclude_slots = extracted.get("exclude_slots")
+
+        if start_time or duration or exclude_slots:
+            preferences = CoursePreferences(
+                start_time=start_time,
+                duration=int(duration) if duration else None,
+                exclude=exclude_slots
+            )
+
+        print(f"\n{'='*60}")
+        print(f"[GENERATE COURSE]")
+        print(f"   User ID: {user_id}")
+        print(f"   Date: {date_str}")
+        print(f"   Template: {template}")
+        print(f"   Preferences: {preferences}")
+        print(f"{'='*60}\n")
+
+        try:
+            # CourseService를 통해 코스 생성
+            course = self.course_service.generate_date_course(
+                user_id=user_id,
+                date=date_str,
+                template=template,
+                preferences=preferences
+            )
+
+            # 세션에 생성된 코스 저장
+            session["generated_course"] = course
+
+            # 코스 정보를 보기 좋게 포맷팅
+            course_lines = []
+            course_lines.append(f"📅 {date_str} ({course.start_time} - {course.end_time})")
+            course_lines.append(f"🚶 총 이동 거리: {course.total_distance}km")
+            course_lines.append(f"⏱️ 총 소요 시간: {course.total_duration}분\n")
+
+            for idx, slot in enumerate(course.slots, 1):
+                time_info = f"{slot.start_time} ({slot.duration}분)"
+                course_lines.append(f"{idx}. {slot.emoji} [{time_info}] {slot.place_name}")
+                if slot.distance_from_previous:
+                    course_lines.append(f"   └ 이전 장소에서 {slot.distance_from_previous}km")
+
+            formatted_message = "\n".join(course_lines)
+
+            print(f"\n[COURSE GENERATED]")
+            print(formatted_message)
+            print(f"{'='*60}\n")
+
+            # 응답 데이터 준비
+            course_data = {
+                "date": course.date,
+                "template": course.template,
+                "start_time": course.start_time,
+                "end_time": course.end_time,
+                "total_distance": course.total_distance,
+                "total_duration": course.total_duration,
+                "slots": [
+                    {
+                        "slot_type": s.slot_type,
+                        "emoji": s.emoji,
+                        "start_time": s.start_time,
+                        "duration": s.duration,
+                        "place_name": s.place_name,
+                        "place_address": s.place_address,
+                        "latitude": s.latitude,
+                        "longitude": s.longitude,
+                        "rating": s.rating,
+                        "score": s.score,
+                        "distance_from_previous": s.distance_from_previous
+                    }
+                    for s in course.slots
+                ]
+            }
+
+            return {
+                "action_taken": "course_generated",
+                "course": course_data,
+                "formatted_message": formatted_message,
+                "improved_message": formatted_message
+            }
+
+        except Exception as e:
+            print(f"[ERROR] Failed to generate course: {e}")
+            import traceback
+            traceback.print_exc()
+
+            return {
+                "action_taken": "error",
+                "message": f"코스 생성 중 오류가 발생했습니다: {str(e)}"
+            }
+
+    def _handle_regenerate_course_slot(self, session: dict, intent: dict, user_id: str = None) -> dict:
+        """코스의 특정 슬롯 재생성 처리"""
+
+        # 세션에 저장된 코스 확인
+        if "generated_course" not in session:
+            return {
+                "action_taken": "error",
+                "message": "재생성할 코스가 없습니다. 먼저 코스를 생성해주세요."
+            }
+
+        if not user_id:
+            return {
+                "action_taken": "error",
+                "message": "로그인이 필요합니다."
+            }
+
+        extracted = intent.get("extracted_data", {})
+        slot_index = extracted.get("slot_index")
+
+        if slot_index is None:
+            return {
+                "action_taken": "error",
+                "message": "재생성할 슬롯 번호를 지정해주세요. (예: '1번 슬롯 다른 장소로')"
+            }
+
+        # slot_index는 1부터 시작하는 사용자 입력을 0-based로 변환
+        slot_index = int(slot_index) - 1
+
+        print(f"\n{'='*60}")
+        print(f"[REGENERATE SLOT] #{slot_index}")
+        print(f"{'='*60}\n")
+
+        try:
+            course = session["generated_course"]
+
+            # CourseService를 통해 슬롯 재생성
+            updated_course = self.course_service.regenerate_course_slot(
+                course=course,
+                slot_index=slot_index,
+                user_id=user_id
+            )
+
+            # 세션에 업데이트된 코스 저장
+            session["generated_course"] = updated_course
+
+            # 변경된 슬롯 정보
+            new_slot = updated_course.slots[slot_index]
+
+            # 응답 메시지
+            message = f"✅ {slot_index + 1}번 슬롯을 다른 장소로 변경했어요!\n\n"
+            message += f"{new_slot.emoji} [{new_slot.start_time}] {new_slot.place_name}"
+            if new_slot.place_address:
+                message += f"\n📍 {new_slot.place_address}"
+            if new_slot.rating:
+                message += f"\n⭐ 평점: {new_slot.rating}"
+
+            # 코스 전체 데이터도 함께 반환
+            course_data = {
+                "date": updated_course.date,
+                "template": updated_course.template,
+                "start_time": updated_course.start_time,
+                "end_time": updated_course.end_time,
+                "total_distance": updated_course.total_distance,
+                "total_duration": updated_course.total_duration,
+                "slots": [
+                    {
+                        "slot_type": s.slot_type,
+                        "emoji": s.emoji,
+                        "start_time": s.start_time,
+                        "duration": s.duration,
+                        "place_name": s.place_name,
+                        "place_address": s.place_address,
+                        "latitude": s.latitude,
+                        "longitude": s.longitude,
+                        "rating": s.rating,
+                        "score": s.score,
+                        "distance_from_previous": s.distance_from_previous
+                    }
+                    for s in updated_course.slots
+                ]
+            }
+
+            print(f"\n[SUCCESS] Slot regenerated successfully")
+            print(f"   Returning improved_message: {message[:80]}...")
+
+            return {
+                "action_taken": "slot_regenerated",
+                "slot_index": slot_index,
+                "improved_message": message,
+                "course": course_data
+            }
+
+        except ValueError as e:
+            print(f"[ERROR] ValueError in regenerate: {e}")
+            return {
+                "action_taken": "error",
+                "message": f"잘못된 슬롯 번호입니다: {str(e)}"
+            }
+        except Exception as e:
+            print(f"[ERROR] Failed to regenerate slot: {e}")
+            import traceback
+            traceback.print_exc()
+
+            return {
+                "action_taken": "error",
+                "message": f"슬롯 재생성 중 오류가 발생했습니다: {str(e)}"
+            }

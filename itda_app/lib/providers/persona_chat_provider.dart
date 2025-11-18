@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/persona_message.dart';
+import '../models/date_course.dart';
 import '../services/persona_api_service.dart';
 import 'schedule_provider.dart';
 
@@ -20,10 +21,14 @@ class PersonaChatProvider extends ChangeNotifier {
   /// 마지막 메시지가 추천 의도였는지 플래그
   bool _lastMessageWasRecommendation = false;
 
+  /// 생성된 데이트 코스
+  DateCourse? _lastGeneratedCourse;
+
   List<PersonaMessage> get messages => List.unmodifiable(_messages);
   bool get isSending => _isSending;
   List<Map<String, dynamic>>? get lastRecommendedPlaces => _lastRecommendedPlaces;
   bool get shouldShowPlaceCards => _lastMessageWasRecommendation && _lastRecommendedPlaces != null && _lastRecommendedPlaces!.isNotEmpty;
+  DateCourse? get lastGeneratedCourse => _lastGeneratedCourse;
 
   /// 일정 생성 응답 (UI에서 SnackBar 띄우고 소비)
   Map<String, dynamic>? takeLastScheduleCreated() {
@@ -81,6 +86,11 @@ class PersonaChatProvider extends ChangeNotifier {
       debugPrint('전송: $text (userId: $userId)');
       final response = await _apiService.sendMessage(text, userId: userId);
 
+      debugPrint('📥 백엔드 응답: action=${response['action']}, message=${response['message']}');
+      if (response['data'] != null) {
+        debugPrint('   data keys: ${response['data'].keys}');
+      }
+
       // 기본 봇 메시지
       String botMessage = response['message'] ?? '응답을 받지 못했어요';
 
@@ -115,6 +125,33 @@ class PersonaChatProvider extends ChangeNotifier {
       } else {
         // 추천이 아닌 다른 액션이면 플래그 초기화
         _lastMessageWasRecommendation = false;
+      }
+
+      // 데이트 코스 생성 처리
+      if (response['action'] == 'generate_course' &&
+          response['data']?['course'] != null) {
+        try {
+          final courseData = response['data']['course'] as Map<String, dynamic>;
+          _lastGeneratedCourse = DateCourse.fromJson(courseData);
+          debugPrint('✅ 데이트 코스 생성됨: ${_lastGeneratedCourse!.slots.length}개 슬롯');
+        } catch (e) {
+          debugPrint('❌ 코스 파싱 오류: $e');
+        }
+      } else if (response['action'] == 'regenerate_course_slot' &&
+          response['data']?['course'] != null) {
+        // 슬롯 재생성 처리
+        try {
+          final courseData = response['data']['course'] as Map<String, dynamic>;
+          _lastGeneratedCourse = DateCourse.fromJson(courseData);
+          debugPrint('✅ 슬롯 재생성됨: ${response['data']?['slot_index']}번');
+        } catch (e) {
+          debugPrint('❌ 슬롯 재생성 파싱 오류: $e');
+        }
+      } else if (response['action'] != 'recommend_place' &&
+                 response['action'] != 're_recommend_place' &&
+                 response['action'] != 'select_place') {
+        // 코스/장소 관련 액션이 아니면 초기화
+        _lastGeneratedCourse = null;
       }
 
       // 일정 생성 처리 → 백엔드에 저장

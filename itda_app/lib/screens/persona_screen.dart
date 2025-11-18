@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/persona_message.dart';
+import '../models/date_course.dart';
 import '../providers/persona_chat_provider.dart';
 import '../providers/schedule_provider.dart';
 import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../widgets/date_course_widget.dart';
 
 class PersonaScreen extends StatefulWidget {
   const PersonaScreen({
@@ -243,6 +245,13 @@ class _ChatList extends StatelessWidget {
               const SizedBox(height: 12),
               _PlaceRecommendationCards(
                 places: chatProvider.lastRecommendedPlaces!,
+              ),
+            ],
+            // 데이트 코스 표시
+            if (isLastBotMessage && chatProvider.lastGeneratedCourse != null) ...[
+              const SizedBox(height: 12),
+              _DateCourseDisplay(
+                course: chatProvider.lastGeneratedCourse!,
               ),
             ],
           ],
@@ -677,6 +686,77 @@ class _PlaceRecommendationCards extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 데이트 코스 표시 위젯
+class _DateCourseDisplay extends StatefulWidget {
+  final DateCourse course;
+
+  const _DateCourseDisplay({required this.course});
+
+  @override
+  State<_DateCourseDisplay> createState() => _DateCourseDisplayState();
+}
+
+class _DateCourseDisplayState extends State<_DateCourseDisplay> {
+  @override
+  Widget build(BuildContext context) {
+    return DateCourseWidget(
+      course: widget.course,
+      onRegenerateSlot: (slotIndex) async {
+        final chatProvider = context.read<PersonaChatProvider>();
+        // 슬롯 번호는 0-based이지만 사용자에게는 1-based로 표시
+        final message = '${slotIndex + 1}번 슬롯 다른 장소로';
+        await chatProvider.sendUserMessage(message);
+      },
+      onAddToSchedule: () async {
+        final scheduleProvider = context.read<ScheduleProvider>();
+        final mapProvider = context.read<MapProvider>();
+        final navigationProvider = context.read<NavigationProvider>();
+
+        try {
+          // 코스의 날짜 파싱 (YYYY-MM-DD 형식)
+          final date = DateTime.parse(widget.course.date);
+
+          // 각 슬롯을 일정으로 추가
+          for (final slot in widget.course.slots) {
+            await scheduleProvider.createScheduleWithBackend(
+              day: date,
+              title: slot.placeName,
+              time: slot.startTime,
+              placeName: slot.placeName,
+              latitude: slot.latitude,
+              longitude: slot.longitude,
+              address: slot.placeAddress,
+            );
+          }
+
+          // 지도에 코스 경로 표시
+          mapProvider.setCourseRoute(widget.course);
+          debugPrint('✅ 데이트 코스를 지도에 표시했습니다');
+
+          // 지도 탭으로 이동
+          navigationProvider.setIndex(1);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ ${widget.course.slots.length}개 일정이 추가되었습니다!'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } catch (e) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ 일정 추가 실패: $e'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      },
     );
   }
 }
