@@ -3,9 +3,9 @@
 algorithm.py를 import하여 사용 (수정 없이 재사용)
 """
 import sys
-import sqlite3
 from pathlib import Path
 from typing import List, Dict, Optional
+from app.core.supabase_client import get_supabase
 
 # backend/algorithm.py를 import하기 위한 경로 설정
 backend_path = Path(__file__).parent.parent.parent
@@ -13,7 +13,6 @@ sys.path.insert(0, str(backend_path))
 
 # algorithm.py import (수정 없이 사용)
 import algorithm
-
 
 class SuggestService:
     """장소 추천 서비스"""
@@ -28,8 +27,7 @@ class SuggestService:
             0.95, 0.3, 0.8, 0.4  # spaceCharacteristics (4)
         ]
 
-        # DB 경로 (backend 폴더 기준 상위 디렉토리의 test.db)
-        self.db_path = str(backend_path / ".." / "test.db")
+        self.supabase = get_supabase()
 
     def get_user_persona(self, user_id: str) -> Optional[List[float]]:
         """
@@ -41,33 +39,33 @@ class SuggestService:
         Returns:
             20차원 페르소나 벡터 or None (페르소나가 완료되지 않은 경우)
         """
-        conn = sqlite3.connect(self.db_path)
-        cur = conn.cursor()
+        user = (
+            self.supabase.table("users")
+            .select("*")
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
 
-        # 사용자 페르소나 조회
-        cur.execute("""
-            SELECT food_cafe, culture_art, activity_sports, nature_healing, craft_experience, shopping,
-                   quiet, romantic, trendy, private_vibe, artistic, energetic,
-                   passive_enjoyment, active_participation, social_bonding, relaxation_focused,
-                   indoor_ratio, crowdedness_expected, photo_worthiness, scenic_view,
-                   survey_done
-            FROM users
-            WHERE user_id = ?
-        """, (user_id,))
-
-        row = cur.fetchone()
-        conn.close()
-
-        if not row:
+        if not user.data:
             return None
+        
+        data = user.data
 
-        # survey_done이 False이면 None 반환
-        if not row[20]:  # survey_done column
+        if not data.get("survey_done"):
             return None
-
-        # 20차원 벡터로 변환
-        persona = list(row[:20])
-        return persona
+        
+        return [
+            data["food_cafe"], data["culture_art"], data["activity_sports"],
+            data["nature_healing"], data["craft_experience"], data["shopping"],
+            data["quiet"], data["romantic"], data["trendy"], data["private_vibe"],
+            data["artistic"], data["energetic"],
+            data["passive_enjoyment"], data["active_participation"],
+            data["social_bonding"], data["relaxation_focused"],
+            data["indoor_ratio"], data["crowdedness_expected"],
+            data["photo_worthiness"], data["scenic_view"]
+        ]
+        
     def get_candidate_places(self, specific_food):
         import time
         from app.external.google_search import search_place_google_v1
@@ -156,10 +154,8 @@ class SuggestService:
             candidates = self.get_candidate_places(specific_food)
 
         # algorithm.py의 recommend_topk() 호출 (수정 없이 사용)
-        # 첫 번째 인자로 db 경로 전달
         try:
             results = algorithm.recommend_topk(
-                db=self.db_path,
                 persona=persona,
                 last_recommend=last_recommend,
                 category=category,
@@ -175,36 +171,32 @@ class SuggestService:
 
         # results는 [(name, score), ...] 형태
         # DB에서 상세 정보를 가져와서 병합
+        places = (
+            self.supabase
+            .table("places")
+            .select("*")
+            .execute()
+        )
+        places = places.data or []
+
         formatted_results = []
 
-        # DB 연결
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row  # 딕셔너리 형태로 결과 반환
-        cur = conn.cursor()
-
         for name, score in results:
-            # 장소 상세 정보 조회
-            cur.execute("""
-                SELECT name, category, address, latitude, longitude,
-                       rating, price_range, opening_hours
-                FROM places
-                WHERE name = ?
-            """, (name,))
+            detail = next((p for p in places if p["name"] == name), None)
+            if not detail:
+                continue
 
-            row = cur.fetchone()
-            if row:
-                place_info = {
-                    "name": row["name"],
-                    "score": round(float(score), 2),
-                    "category": row["category"],
-                    "address": row["address"],
-                    "latitude": row["latitude"],
-                    "longitude": row["longitude"],
-                    "rating": row["rating"],
-                    "price_range": row["price_range"],
-                    "opening_hours": row["opening_hours"]
-                }
-                formatted_results.append(place_info)
+            place_info = {
+                "name": detail["name"],
+                "score": round(float(score), 2),
+                "category": detail.get("category"),
+                "address": detail.get("address"),
+                "latitude": detail.get("latitude"),
+                "longitude": detail.get("longitude"),
+                "rating": detail.get("rating"),
+                "price_range": detail.get("price_range"),
+                "opening_hours": detail.get("opening_hours"),
+            }
+            formatted_results.append(place_info)
 
-        conn.close()
         return formatted_results

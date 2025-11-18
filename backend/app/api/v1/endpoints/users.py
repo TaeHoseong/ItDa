@@ -4,7 +4,7 @@ User management endpoints
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from app.core.database import get_db
+from app.core.supabase_client import get_supabase
 from app.core.security import verify_token
 from app.models.user import User
 from app.schemas.user import UserResponse, SurveyUpdate
@@ -18,14 +18,13 @@ security = HTTPBearer()
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
 ) -> User:
     """
     Extract and verify JWT token from Authorization header
 
     Args:
         credentials: HTTP Bearer credentials from header
-        db: Database session
+        supabse: Database session
 
     Returns:
         User object
@@ -40,13 +39,22 @@ def get_current_user(
         user_id = verify_token(token)
 
         # Get user from database
-        user = db.query(User).filter(User.user_id == user_id).first()
+        supabase = get_supabase()
+        response = (
+            supabase.table("users")
+            .select("*")
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
 
-        if not user:
+        if not response.data:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found"
             )
+        else:
+            user = response.data
 
         return user
 
@@ -59,7 +67,7 @@ def get_current_user(
 
 @router.get("/me", response_model=UserResponse, status_code=status.HTTP_200_OK)
 async def get_current_user_info(
-    current_user: User = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """
     Get current user information
@@ -71,15 +79,15 @@ async def get_current_user_info(
         UserResponse with user info
     """
     return UserResponse(
-        user_id=current_user.user_id,
-        email=current_user.email,
-        name=current_user.name,
-        picture=current_user.picture,
-        nickname=current_user.nickname,
-        birthday=current_user.birthday,
-        gender=current_user.gender,
-        couple_id=current_user.couple_id,
-        survey_done=current_user.survey_done
+        user_id=current_user["user_id"],
+        email=current_user["email"],
+        name=current_user["name"],
+        picture=current_user["picture"],
+        nickname=current_user["nickname"],
+        birthday=current_user["birthday"],
+        gender=current_user["gender"],
+        couple_id=current_user["couple_id"],
+        survey_done=current_user.get("survey_done", False)
     )
 
 
@@ -87,7 +95,6 @@ async def get_current_user_info(
 async def submit_survey(
     survey_data: SurveyUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
 ):
     """
     Submit or re-submit user survey (updates persona)
@@ -98,7 +105,6 @@ async def submit_survey(
     Args:
         survey_data: SurveyUpdate containing 20 dimension values
         current_user: Authenticated user from JWT
-        db: Database session
 
     Returns:
         UserResponse with updated user info
@@ -107,6 +113,7 @@ async def submit_survey(
         HTTPException 404: If user not found
         HTTPException 500: If database operation fails
     """
+    supabase = get_supabase()
     try:
         user_service = UserService(db)
 
@@ -134,7 +141,6 @@ async def submit_survey(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update survey: {str(e)}"

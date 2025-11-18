@@ -4,14 +4,15 @@ from app.schemas.persona import ChatRequest, ChatResponse
 from app.services.openai_service import analyze_intent
 from app.services.schedule_service import ScheduleService
 from app.services.suggest_service import SuggestService
+from app.core.supabase_client import get_supabase
 from app.services.course_service import CourseService
 from app.schemas.course import CoursePreferences
 from sqlalchemy.orm import Session
 
 class PersonaService:
-    def __init__(self, sessions: Dict, db: Session = None):
+    def __init__(self, sessions: Dict):
         self.sessions = sessions
-        self.db = db
+        self.supabase = get_supabase()
         self.suggest_service = SuggestService()
         self.course_service = CourseService()
 
@@ -359,7 +360,7 @@ class PersonaService:
         # pending_data 초기화 (일정 조회는 독립적인 액션)
         session["pending_data"] = {}
 
-        if not self.db:
+        if not self.supabse:
             return {
                 "action_taken": "error",
                 "message": "데이터베이스 연결이 필요합니다."
@@ -382,7 +383,7 @@ class PersonaService:
         print(f"{'='*60}\n")
 
         # ScheduleService 인스턴스 생성 (DB session 전달)
-        schedule_service = ScheduleService(self.db)
+        schedule_service = ScheduleService(self.supabase)
 
         # 시간 범위 계산
         now = datetime.now()

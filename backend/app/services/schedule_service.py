@@ -1,15 +1,14 @@
 from typing import List, Optional
 from datetime import datetime
-from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from app.models.schedule import Schedule
-
+from app.core.supabase_client import get_supabase
 
 class ScheduleService:
-    """일정 관리 서비스 (SQLAlchemy 기반)"""
+    """일정 관리 서비스 (supabase 기반)"""
 
-    def __init__(self, db: Session):
-        self.db = db
+    def __init__(self):
+        self.supabse = get_supabase()
 
     def create(self, user_id: str, data: dict) -> Schedule:
         """일정 생성"""

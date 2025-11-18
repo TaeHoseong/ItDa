@@ -2,15 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.api import api_router
 from app.config import settings
-from app.core.database import engine
 from app.core.exceptions import custom_exception_handler
-from app.models import place, user
-from app.models.schedule import Schedule
-from app.core.database import Base
-
-
-# DB 테이블 생성
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
