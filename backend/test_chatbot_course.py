@@ -24,7 +24,7 @@ async def test_course_generation():
 
     # PersonaService 초기화
     sessions = {}
-    service = PersonaService(sessions=sessions, db=None)
+    service = PersonaService(sessions=sessions)
 
     # 테스트 사용자 ID (페르소나 완료된 사용자)
     user_id = "102928578341147999188"
