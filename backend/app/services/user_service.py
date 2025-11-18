@@ -30,7 +30,7 @@ class UserService:
             name=user_data.name,
             picture=user_data.picture,
             nickname=user_data.nickname,
-            birth_date=user_data.birth_date,
+            birthday=user_data.birthday,
             gender=user_data.gender,
             survey_done=False,  # Survey not done yet
             couple_id=None
@@ -131,7 +131,7 @@ class UserService:
         self,
         user_id: str,
         nickname: Optional[str] = None,
-        birth_date: Optional[str] = None,
+        birthday: Optional[str] = None,
         gender: Optional[str] = None
     ) -> Optional[User]:
         """
@@ -140,7 +140,7 @@ class UserService:
         Args:
             user_id: User's unique identifier
             nickname: New nickname (optional)
-            birth_date: New birth date (optional)
+            birthday: New birth date (optional)
             gender: New gender (optional)
 
         Returns:
@@ -152,8 +152,8 @@ class UserService:
 
         if nickname is not None:
             user.nickname = nickname
-        if birth_date is not None:
-            user.birth_date = birth_date
+        if birthday is not None:
+            user.birthday = birthday
         if gender is not None:
             user.gender = gender
 

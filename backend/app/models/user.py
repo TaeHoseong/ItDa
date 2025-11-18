@@ -14,7 +14,7 @@ class User(Base):
 
     # Additional user info (Phase 10.2)
     nickname = Column(String, unique=True, nullable=True, index=True)  # 사용자 닉네임
-    birth_date = Column(String, nullable=True)  # YYYY-MM-DD 형식
+    birthday = Column(String, nullable=True)  # YYYY-MM-DD 형식
     gender = Column(String, nullable=True)  # "male" or "female"
 
     # Couple relationship (Phase 10.3)

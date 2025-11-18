@@ -76,7 +76,7 @@ async def get_current_user_info(
         name=current_user.name,
         picture=current_user.picture,
         nickname=current_user.nickname,
-        birth_date=current_user.birth_date,
+        birthday=current_user.birthday,
         gender=current_user.gender,
         couple_id=current_user.couple_id,
         survey_done=current_user.survey_done
@@ -125,7 +125,7 @@ async def submit_survey(
             name=updated_user.name,
             picture=updated_user.picture,
             nickname=updated_user.nickname,
-            birth_date=updated_user.birth_date,
+            birthday=updated_user.birthday,
             gender=updated_user.gender,
             couple_id=updated_user.couple_id,
             survey_done=updated_user.survey_done

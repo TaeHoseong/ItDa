@@ -142,7 +142,7 @@ async def register(
             name=user.name,
             picture=user.picture,
             nickname=user.nickname,
-            birth_date=user.birth_date,
+            birthday=user.birthday,
             gender=user.gender,
             couple_id=user.couple_id,
             survey_done=user.survey_done

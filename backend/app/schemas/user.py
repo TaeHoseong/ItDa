@@ -8,7 +8,7 @@ class UserCreate(BaseModel):
     email: str
     name: str
     nickname: str
-    birth_date: str  # YYYY-MM-DD format
+    birthday: str  # YYYY-MM-DD format
     gender: str  # "male" or "female"
     picture: Optional[str] = None  # Profile picture URL from OAuth
 
@@ -18,7 +18,7 @@ class UserCreate(BaseModel):
                 "email": "user@example.com",
                 "name": "홍길동",
                 "nickname": "gildong",
-                "birth_date": "1990-01-01",
+                "birthday": "1990-01-01",
                 "gender": "male",
                 "picture": "https://example.com/photo.jpg"
             }
@@ -32,7 +32,7 @@ class UserBase(BaseModel):
     name: Optional[str] = None
     picture: Optional[str] = None
     nickname: Optional[str] = None
-    birth_date: Optional[str] = None
+    birthday: Optional[str] = None
     gender: Optional[str] = None
     couple_id: Optional[str] = None
     survey_done: bool
@@ -50,7 +50,7 @@ class UserResponse(BaseModel):
     name: Optional[str] = None
     picture: Optional[str] = None
     nickname: Optional[str] = None
-    birth_date: Optional[str] = None
+    birthday: Optional[str] = None
     gender: Optional[str] = None
     couple_id: Optional[str] = None
     survey_done: bool
