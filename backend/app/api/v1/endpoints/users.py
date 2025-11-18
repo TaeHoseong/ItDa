@@ -4,7 +4,7 @@ User management endpoints
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from app.core.database import get_db
+from app.core.supabase_client import get_supabase
 from app.core.security import verify_token
 from app.models.user import User
 from app.schemas.user import UserPersonaUpdate, UserResponse
@@ -17,14 +17,13 @@ security = HTTPBearer()
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
 ) -> User:
     """
     Extract and verify JWT token from Authorization header
 
     Args:
         credentials: HTTP Bearer credentials from header
-        db: Database session
+        supabse: Database session
 
     Returns:
         User object
@@ -39,13 +38,22 @@ def get_current_user(
         user_id = verify_token(token)
 
         # Get user from database
-        user = db.query(User).filter(User.user_id == user_id).first()
+        supabase = get_supabase()
+        response = (
+            supabase.table("users")
+            .select("*")
+            .eq("user_id", user_id)
+            .single()
+            .execute()
+        )
 
-        if not user:
+        if not response.data:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found"
             )
+        else:
+            user = response.data
 
         return user
 
@@ -58,7 +66,7 @@ def get_current_user(
 
 @router.get("/me", response_model=UserResponse, status_code=status.HTTP_200_OK)
 async def get_current_user_info(
-    current_user: User = Depends(get_current_user)
+    current_user = Depends(get_current_user)
 ):
     """
     Get current user information
@@ -70,10 +78,10 @@ async def get_current_user_info(
         UserResponse with user info
     """
     return UserResponse(
-        user_id=current_user.user_id,
-        email=current_user.email,
-        name=current_user.name,
-        persona_completed=current_user.persona_completed
+        user_id=current_user["user_id"],
+        email=current_user["email"],
+        name=current_user["name"],
+        survey_done=current_user.get("survey_done", False)
     )
 
 
@@ -81,7 +89,6 @@ async def get_current_user_info(
 async def update_persona(
     persona: UserPersonaUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
 ):
     """
     Update user persona (survey results)
@@ -89,7 +96,6 @@ async def update_persona(
     Args:
         persona: UserPersonaUpdate containing 20 dimension values
         current_user: Authenticated user from JWT
-        db: Database session
 
     Returns:
         UserResponse with updated user info
@@ -97,47 +103,53 @@ async def update_persona(
     Raises:
         HTTPException 500: If database operation fails
     """
+    supabase = get_supabase()
     try:
-        # Update all persona fields
-        current_user.food_cafe = persona.food_cafe
-        current_user.culture_art = persona.culture_art
-        current_user.activity_sports = persona.activity_sports
-        current_user.nature_healing = persona.nature_healing
-        current_user.craft_experience = persona.craft_experience
-        current_user.shopping = persona.shopping
+        features_vector = [
+            persona.food_cafe,
+            persona.culture_art,
+            persona.activity_sports,
+            persona.nature_healing,
+            persona.craft_experience,
+            persona.shopping,
 
-        current_user.quiet = persona.quiet
-        current_user.romantic = persona.romantic
-        current_user.trendy = persona.trendy
-        current_user.private_vibe = persona.private_vibe
-        current_user.artistic = persona.artistic
-        current_user.energetic = persona.energetic
+            persona.quiet,
+            persona.romantic,
+            persona.trendy,
+            persona.private_vibe,
+            persona.artistic,
+            persona.energetic,
 
-        current_user.passive_enjoyment = persona.passive_enjoyment
-        current_user.active_participation = persona.active_participation
-        current_user.social_bonding = persona.social_bonding
-        current_user.relaxation_focused = persona.relaxation_focused
+            persona.passive_enjoyment,
+            persona.active_participation,
+            persona.social_bonding,
+            persona.relaxation_focused,
 
-        current_user.indoor_ratio = persona.indoor_ratio
-        current_user.crowdedness_expected = persona.crowdedness_expected
-        current_user.photo_worthiness = persona.photo_worthiness
-        current_user.scenic_view = persona.scenic_view
-
-        # Mark persona as completed
-        current_user.persona_completed = True
-
-        db.commit()
-        db.refresh(current_user)
+            persona.indoor_ratio,
+            persona.crowdedness_expected,
+            persona.photo_worthiness,
+            persona.scenic_view,
+        ]
+        response = (
+            supabase.table("users")
+            .update({
+                "features": features_vector,
+                "survey_done": True
+            })
+            .eq("user_id", current_user["user_id"])
+            .execute()
+        )
+        
+        updated_user = response.data[0]
 
         return UserResponse(
-            user_id=current_user.user_id,
-            email=current_user.email,
-            name=current_user.name,
-            persona_completed=current_user.persona_completed
+            user_id=updated_user["user_id"],
+            email=updated_user["email"],
+            name=updated_user["name"],
+            survey_done=updated_user["survey_done"]
         )
 
     except Exception as e:
-        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update persona: {str(e)}"

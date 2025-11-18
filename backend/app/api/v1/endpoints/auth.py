@@ -3,7 +3,7 @@ Authentication endpoints
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app.core.database import get_db
+from app.core.supabase_client import get_supabase
 from app.core.security import verify_google_token, create_access_token
 from app.models.user import User
 from app.schemas.auth import GoogleLoginRequest, TokenResponse
@@ -13,10 +13,7 @@ router = APIRouter()
 
 
 @router.post("/google", response_model=TokenResponse, status_code=status.HTTP_200_OK)
-async def google_login(
-    request: GoogleLoginRequest,
-    db: Session = Depends(get_db)
-):
+async def google_login(request: GoogleLoginRequest):
     """
     Google OAuth login endpoint
 
@@ -27,7 +24,6 @@ async def google_login(
 
     Args:
         request: GoogleLoginRequest containing id_token
-        db: Database session
 
     Returns:
         TokenResponse with access_token and user info
@@ -47,38 +43,62 @@ async def google_login(
         )
 
     try:
-        # 2. Check if user exists in database
-        user = db.query(User).filter(User.user_id == user_info['sub']).first()
-
-        if not user:
+        supabase = get_supabase()
+        response = (
+            supabase.table("users")
+            .select("*")
+            .eq("user_id", user_info['sub'])
+            .execute()
+        )
+        
+        if response.data:
+            user_record = response.data[0]
+        else:
             # Create new user
-            user = User(
-                user_id=user_info['sub'],
-                email=user_info['email'],
-                name=user_info.get('name'),
-                picture=user_info.get('picture')
+            response = (
+                supabase.table("users").insert({
+                    "user_id": user_info.get("sub"),
+                    "email": user_info.get("email"),
+                    "name": user_info.get("name"),
+                    "picture": user_info.get("picture"),
+                    "survey_done": False,
+                })
+                .execute()
             )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
+            user_record = response.data[0]
+            
+            if not response.data:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Supabase user creation failed"
+                )
+            user_record = response.data[0]
 
+
+            
         # 3. Generate JWT access token
-        access_token = create_access_token(user.user_id)
-
+        access_token = create_access_token(user_record["user_id"])
+        response = (
+            supabase.table("users")
+            .update({"token": access_token})
+            .eq("user_id", user_record["user_id"])
+            .execute()
+        )
+        
+        updated_user = response.data[0]
         # 4. Return token and user info
         return TokenResponse(
             access_token=access_token,
             token_type="bearer",
             user={
-                "user_id": user.user_id,
-                "email": user.email,
-                "name": user.name,
-                "persona_completed": user.persona_completed
+                "user_id": updated_user["user_id"],
+                "email": updated_user["email"],
+                "name": updated_user["name"],
+                "survey_done": updated_user["survey_done"]
             }
         )
 
     except Exception as e:
-        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database operation failed: {str(e)}"
