@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import verify_token
 from app.models.user import User
-from app.schemas.user import UserPersonaUpdate, UserResponse
+from app.schemas.user import UserResponse, SurveyUpdate
+from app.services.user_service import UserService
 from jose import JWTError
 
 
@@ -73,21 +74,29 @@ async def get_current_user_info(
         user_id=current_user.user_id,
         email=current_user.email,
         name=current_user.name,
+        picture=current_user.picture,
+        nickname=current_user.nickname,
+        birth_date=current_user.birth_date,
+        gender=current_user.gender,
+        couple_id=current_user.couple_id,
         persona_completed=current_user.persona_completed
     )
 
 
-@router.put("/persona", response_model=UserResponse, status_code=status.HTTP_200_OK)
-async def update_persona(
-    persona: UserPersonaUpdate,
+@router.put("/survey", response_model=UserResponse, status_code=status.HTTP_200_OK)
+async def submit_survey(
+    survey_data: SurveyUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Update user persona (survey results)
+    Submit or re-submit user survey (updates persona)
+
+    This endpoint allows users to submit their survey results (20 persona dimensions)
+    for the first time or re-submit to update their preferences.
 
     Args:
-        persona: UserPersonaUpdate containing 20 dimension values
+        survey_data: SurveyUpdate containing 20 dimension values
         current_user: Authenticated user from JWT
         db: Database session
 
@@ -95,50 +104,38 @@ async def update_persona(
         UserResponse with updated user info
 
     Raises:
+        HTTPException 404: If user not found
         HTTPException 500: If database operation fails
     """
     try:
-        # Update all persona fields
-        current_user.food_cafe = persona.food_cafe
-        current_user.culture_art = persona.culture_art
-        current_user.activity_sports = persona.activity_sports
-        current_user.nature_healing = persona.nature_healing
-        current_user.craft_experience = persona.craft_experience
-        current_user.shopping = persona.shopping
+        user_service = UserService(db)
 
-        current_user.quiet = persona.quiet
-        current_user.romantic = persona.romantic
-        current_user.trendy = persona.trendy
-        current_user.private_vibe = persona.private_vibe
-        current_user.artistic = persona.artistic
-        current_user.energetic = persona.energetic
+        # Update persona using service layer
+        updated_user = user_service.update_persona(current_user.user_id, survey_data)
 
-        current_user.passive_enjoyment = persona.passive_enjoyment
-        current_user.active_participation = persona.active_participation
-        current_user.social_bonding = persona.social_bonding
-        current_user.relaxation_focused = persona.relaxation_focused
-
-        current_user.indoor_ratio = persona.indoor_ratio
-        current_user.crowdedness_expected = persona.crowdedness_expected
-        current_user.photo_worthiness = persona.photo_worthiness
-        current_user.scenic_view = persona.scenic_view
-
-        # Mark persona as completed
-        current_user.persona_completed = True
-
-        db.commit()
-        db.refresh(current_user)
+        if not updated_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
 
         return UserResponse(
-            user_id=current_user.user_id,
-            email=current_user.email,
-            name=current_user.name,
-            persona_completed=current_user.persona_completed
+            user_id=updated_user.user_id,
+            email=updated_user.email,
+            name=updated_user.name,
+            picture=updated_user.picture,
+            nickname=updated_user.nickname,
+            birth_date=updated_user.birth_date,
+            gender=updated_user.gender,
+            couple_id=updated_user.couple_id,
+            persona_completed=updated_user.persona_completed
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update persona: {str(e)}"
+            detail=f"Failed to update survey: {str(e)}"
         )

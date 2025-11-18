@@ -9,7 +9,7 @@ class UserApiService {
   static const _storage = FlutterSecureStorage();
   static const _kAccessToken = 'access_token';
 
-  /// Update user persona (survey results)
+  /// Submit user survey (persona results)
   ///
   /// Sends 20-dimension persona vector to backend
   /// Requires authentication (uses stored access_token)
@@ -18,7 +18,7 @@ class UserApiService {
   /// - No access token found (user not logged in)
   /// - API request fails
   /// - Server returns error
-  static Future<void> updatePersona(UserPersona persona) async {
+  static Future<void> submitSurvey(UserPersona persona) async {
     // Get stored access token
     final token = await _storage.read(key: _kAccessToken);
 
@@ -28,7 +28,7 @@ class UserApiService {
 
     // Make API request
     final response = await http.put(
-      Uri.parse('${ApiConfig.baseUrl}/users/persona'),
+      Uri.parse('${ApiConfig.baseUrl}/users/survey'),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
@@ -39,10 +39,10 @@ class UserApiService {
     if (response.statusCode != 200) {
       final body = jsonDecode(response.body);
       throw Exception(
-        '페르소나 저장 실패 (${response.statusCode}): ${body['detail'] ?? response.body}',
+        '설문 저장 실패 (${response.statusCode}): ${body['detail'] ?? response.body}',
       );
     }
 
-    // Success - persona saved to database
+    // Success - survey saved to database
   }
 }
