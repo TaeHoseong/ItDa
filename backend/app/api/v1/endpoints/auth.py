@@ -75,7 +75,7 @@ async def google_login(
                 "user_id": user.user_id,
                 "email": user.email,
                 "name": user.name,
-                "persona_completed": user.persona_completed
+                "survey_done": user.survey_done
             }
         )
 
@@ -145,7 +145,7 @@ async def register(
             birth_date=user.birth_date,
             gender=user.gender,
             couple_id=user.couple_id,
-            persona_completed=user.persona_completed
+            survey_done=user.survey_done
         )
 
     except HTTPException:
@@ -203,7 +203,7 @@ async def login(
                 "email": user.email,
                 "name": user.name,
                 "nickname": user.nickname,
-                "persona_completed": user.persona_completed
+                "survey_done": user.survey_done
             }
         )
 

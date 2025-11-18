@@ -12,4 +12,4 @@ class TokenResponse(BaseModel):
     """Response schema for successful authentication"""
     access_token: str
     token_type: str = "bearer"
-    user: Dict  # Contains user_id, email, name, persona_completed
+    user: Dict  # Contains user_id, email, name, survey_done

@@ -49,6 +49,6 @@ class User(Base):
     scenic_view = Column(Float, default=0.0, nullable=False)
 
     # Metadata
-    persona_completed = Column(Boolean, default=False, nullable=False)
+    survey_done = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

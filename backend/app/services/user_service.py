@@ -32,7 +32,7 @@ class UserService:
             nickname=user_data.nickname,
             birth_date=user_data.birth_date,
             gender=user_data.gender,
-            persona_completed=False,  # Survey not done yet
+            survey_done=False,  # Survey not done yet
             couple_id=None
         )
         self.db.add(user)
@@ -121,7 +121,7 @@ class UserService:
         user.scenic_view = survey_data.scenic_view
 
         # Mark survey as completed
-        user.persona_completed = True
+        user.survey_done = True
 
         self.db.commit()
         self.db.refresh(user)

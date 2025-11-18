@@ -50,7 +50,7 @@ class SuggestService:
                    quiet, romantic, trendy, private_vibe, artistic, energetic,
                    passive_enjoyment, active_participation, social_bonding, relaxation_focused,
                    indoor_ratio, crowdedness_expected, photo_worthiness, scenic_view,
-                   persona_completed
+                   survey_done
             FROM users
             WHERE user_id = ?
         """, (user_id,))
@@ -61,8 +61,8 @@ class SuggestService:
         if not row:
             return None
 
-        # persona_completed가 False이면 None 반환
-        if not row[20]:  # persona_completed column
+        # survey_done이 False이면 None 반환
+        if not row[20]:  # survey_done column
             return None
 
         # 20차원 벡터로 변환

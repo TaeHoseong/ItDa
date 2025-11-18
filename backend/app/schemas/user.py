@@ -35,7 +35,7 @@ class UserBase(BaseModel):
     birth_date: Optional[str] = None
     gender: Optional[str] = None
     couple_id: Optional[str] = None
-    persona_completed: bool
+    survey_done: bool
     created_at: datetime
     updated_at: datetime
 
@@ -53,7 +53,7 @@ class UserResponse(BaseModel):
     birth_date: Optional[str] = None
     gender: Optional[str] = None
     couple_id: Optional[str] = None
-    persona_completed: bool
+    survey_done: bool
 
     class Config:
         from_attributes = True  # Pydantic v2 (previously orm_mode = True)

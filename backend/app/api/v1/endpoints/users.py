@@ -79,7 +79,7 @@ async def get_current_user_info(
         birth_date=current_user.birth_date,
         gender=current_user.gender,
         couple_id=current_user.couple_id,
-        persona_completed=current_user.persona_completed
+        survey_done=current_user.survey_done
     )
 
 
@@ -128,7 +128,7 @@ async def submit_survey(
             birth_date=updated_user.birth_date,
             gender=updated_user.gender,
             couple_id=updated_user.couple_id,
-            persona_completed=updated_user.persona_completed
+            survey_done=updated_user.survey_done
         )
 
     except HTTPException:
