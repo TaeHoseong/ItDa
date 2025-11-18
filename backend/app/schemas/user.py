@@ -38,7 +38,7 @@ class UserResponse(BaseModel):
     user_id: str
     email: str
     name: Optional[str] = None
-    persona_completed: bool
+    survey_done: bool
 
     class Config:
         from_attributes = True  # Pydantic v2 (previously orm_mode = True)

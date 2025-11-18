@@ -1,7 +1,13 @@
 import numpy as np
+import os
 import json
 import sqlite3
+from app.core.supabase_client import get_supabase
+from dotenv import load_dotenv
 import math
+
+load_dotenv(".env")
+
 persona = [1,0,0,0,0,0,  0.9,0.7,0.5,0.8,0.8,0.3,  0.8,0.1,0.7,0.9,  0.95,0.3,0.8,0.4]
 
 personas = np.array([
@@ -37,13 +43,11 @@ def extract_features(place: json, persona):
         print(f"key error | {e} in place: {place.get('name', 'Unknown')}")
         return np.zeros(20), 0, 0  # 수정: 3개 값 반환 (4개 아님)
 
-def recommend_topk(db, persona, last_recommend, candidate_names, category, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4):
-    conn = sqlite3.connect(db)
-    cur = conn.cursor()
-    
-    cur.execute("SELECT name, latitude, longitude, scores FROM places")
-    rows = cur.fetchall()
-    conn.close()
+def recommend_topk(persona, last_recommend=None, candidate_names=None, category=None, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4):
+    supabase = get_supabase()
+    response = supabase.table("places").select("*").execute()
+    places = response.data
+
     scores_total = []
     def cos_similarity(A, B):
         return np.dot(A, B)/(np.linalg.norm(A)*np.linalg.norm(B))
@@ -59,7 +63,10 @@ def recommend_topk(db, persona, last_recommend, candidate_names, category, k=3, 
             a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
             c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
             return R * c
-    for name, latitude, longitude, scores in rows:
+    for place in places:
+        name = place["name"]
+        scores = place["features"]
+        latitude, longitude = place["latitude"], place["longitude"]
         if last_recommend and name in last_recommend:
             print(f"skip {name} (negative react)")
             continue
@@ -89,9 +96,8 @@ def recommend_topk(db, persona, last_recommend, candidate_names, category, k=3, 
     return sorted_results[:k]
 
 if __name__ == '__main__':
-    db = "./test.db"
     for i, persona in enumerate(personas):
         print(f"------persona {i+1}--------")
-        results = recommend_topk(db, persona, k=10)
+        results = recommend_topk(persona, k=10)
         for place in results:
             print(f"당신에게 딱 맞는 장소는 {place[0]}이고, {place[1]:.2f}점의 점수로 추천되었습니다")

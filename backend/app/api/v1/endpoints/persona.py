@@ -3,7 +3,6 @@ from typing import Dict
 from sqlalchemy.orm import Session
 from app.schemas.persona import ChatRequest, ChatResponse
 from app.services.persona_service import PersonaService
-from app.core.database import get_db
 
 router = APIRouter()
 
@@ -11,10 +10,10 @@ router = APIRouter()
 sessions: Dict[str, dict] = {}
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest, db: Session = Depends(get_db)):
+async def chat(request: ChatRequest):
     """페르소나 챗봇 대화"""
     try:
-        service = PersonaService(sessions, db)
+        service = PersonaService(sessions)
         return await service.process_message(request)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,89 +1,110 @@
-from typing import Union
-from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
-from database import SessionLocal, engine
-import models
-
-# DB 테이블 생성
-models.Base.metadata.create_all(bind=engine)
+from app.core.supabase_client import get_supabase
 
 app = FastAPI()
 
 # Pydantic 모델
 class Place(BaseModel):
-    id: int
     place_id: str
     name: str
     category: str
     address: str
-    lattitude: float
+    latitude: float
     longitude: float
     rating: float
     price_range: str
     opening_hours: str
     reviews: str
 
-# DB 세션 의존성
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def get_client():
+    return get_supabase()
+
 
 @app.get("/")
 def read_root():
     return {"ItDa": "Useful"}
 
 @app.get("/places/by_place_id/{place_id}")
-def read_place(place_id: str, db: Session = Depends(get_db)):
-    item = db.query(models.PlaceModel).filter(models.PlaceModel.place_id == place_id).first()
-    if not item:
+def read_place(place_id: str, client = Depends(get_client)):
+    response = (
+        client.table("places")
+        .select("*")
+        .eq("place_id", place_id)
+        .execute()
+    )
+
+    data = response.data
+    if not data:
         raise HTTPException(status_code=404, detail="Item not found")
-    return item
+
+    return data[0]
 
 @app.get("/places/by_id/{id}")
-def read_place_index(id: int, db: Session = Depends(get_db)):
-    item = db.query(models.PlaceModel).filter(models.PlaceModel.id == id).first()
-    if not item:
+def read_place_index(id: int, client = Depends(get_client)):
+    response = (
+        client.table("places")
+        .select("*")
+        .eq("id", id)
+        .execute()
+    )
+
+    data = response.data
+    if not data:
         raise HTTPException(status_code=404, detail="Item not found")
-    return item
+
+    return data[0]
 
 @app.put("/places/by_place_id/{place_id}")
-def update_place(place_id: str, place: Place, db: Session = Depends(get_db)):
-    db_place = db.query(models.PlaceModel).filter(models.PlaceModel.place_id == place_id).first()
-    if not db_place:
+def update_place(place_id: str, place: Place, client = Depends(get_client)):
+    # 먼저 존재 여부 확인
+    existing = (
+        client.table("places")
+        .select("*")
+        .eq("place_id", place_id)
+        .execute()
+    )
+
+    if not existing.data:
         raise HTTPException(status_code=404, detail="Item not found")
 
-    db_place.name = place.name
-    db_place.category=place.category
-    db_place.addres=place.address,
-    db_place.lattitude=place.latitude,
-    db_place.longitude=place.longitude,
-    db_place.rating=place.rating,
-    db_place.price_range=place.price_range
-    db_place.reviews = place.reviews
-    
-    db.commit()
-    db.refresh(db_place)
-    return db_place
+    # 업데이트 실행
+    response = (
+        client.table("places")
+        .update({
+            "name": place.name,
+            "category": place.category,
+            "address": place.address,
+            "latitude": place.latitude,
+            "longitude": place.longitude,
+            "rating": place.rating,
+            "price_range": place.price_range,
+            "opening_hours": place.opening_hours,
+            "reviews": place.reviews
+        })
+        .eq("place_id", place_id)
+        .execute()
+    )
+
+    return response.data[0]
 
 @app.post("/places/")
-def create_place(place: Place, db: Session = Depends(get_db)):
-    db_place = models.PlaceModel(
-        place_id=place.place_id,
-        name=place.name,
-        category=place.category,
-        addres=place.address,
-        lattitude=place.latitude,
-        longitude=place.longitude,
-        rating=place.rating,
-        price_range=place.price_range,
-        opeining_hours=place.opening_hours,
-        reviews =place.reviews
+def create_place(place: Place, client = Depends(get_client)):
+    response = (
+        client.table("places")
+        .insert({
+            "place_id": place.place_id,
+            "name": place.name,
+            "category": place.category,
+            "address": place.address,
+            "latitude": place.latitude,
+            "longitude": place.longitude,
+            "rating": place.rating,
+            "price_range": place.price_range,
+            "opening_hours": place.opening_hours,
+            "reviews": place.reviews
+        })
+        .execute()
     )
-    db.add(db_place)
-    db.commit()
-    db.refresh(db_place)
-    return db_place
+    
+    return response.data[0]

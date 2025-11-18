@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from app.core.database import get_db
+from app.core.supabase_client import get_supabase
 from app.core.security import get_current_user
 from app.schemas.schedule import ScheduleCreate, ScheduleUpdate, ScheduleResponse
 from app.services.schedule_service import ScheduleService
@@ -13,10 +13,10 @@ router = APIRouter()
 def create_schedule(
     schedule_data: ScheduleCreate,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
 ):
+    supabse = get_supabase()
     """일정 생성 (JWT 인증 필요)"""
-    service = ScheduleService(db)
+    service = ScheduleService()
     user_id = current_user["user_id"]
 
     schedule = service.create(
@@ -29,10 +29,9 @@ def create_schedule(
 @router.get("", response_model=List[ScheduleResponse])
 def get_schedules(
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
 ):
     """사용자 전체 일정 조회 (JWT에서 user_id 추출)"""
-    service = ScheduleService(db)
+    service = ScheduleService()
     user_id = current_user["user_id"]
 
     schedules = service.get_by_user(user_id)
@@ -43,10 +42,9 @@ def get_schedules(
 def get_schedule(
     schedule_id: int,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
 ):
     """특정 일정 조회"""
-    service = ScheduleService(db)
+    service = ScheduleService()
     schedule = service.get_by_id(schedule_id)
 
     if not schedule:
@@ -64,10 +62,9 @@ def update_schedule(
     schedule_id: int,
     schedule_data: ScheduleUpdate,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
 ):
     """일정 수정"""
-    service = ScheduleService(db)
+    service = ScheduleService()
 
     # 일정 존재 및 권한 확인
     schedule = service.get_by_id(schedule_id)
@@ -89,10 +86,9 @@ def update_schedule(
 def delete_schedule(
     schedule_id: int,
     current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db)
 ):
     """일정 삭제"""
-    service = ScheduleService(db)
+    service = ScheduleService()
 
     # 일정 존재 및 권한 확인
     schedule = service.get_by_id(schedule_id)
