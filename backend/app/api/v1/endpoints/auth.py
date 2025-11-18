@@ -110,7 +110,6 @@ async def google_login(request: GoogleLoginRequest):
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserCreate,
-    db: Session = Depends(get_db)
 ):
     """
     User registration endpoint (Phase 10.2)
@@ -131,7 +130,7 @@ async def register(
         HTTPException 500: If database operation fails
     """
     try:
-        user_service = UserService(db)
+        user_service = UserService()
 
         # Check if email already exists
         existing_user = user_service.get_by_email(user_data.email)
@@ -171,7 +170,6 @@ async def register(
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Registration failed: {str(e)}"
@@ -181,7 +179,6 @@ async def register(
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 async def login(
     email: str,
-    db: Session = Depends(get_db)
 ):
     """
     User login endpoint (Phase 10.2)
@@ -201,7 +198,7 @@ async def login(
         HTTPException 500: If database operation fails
     """
     try:
-        user_service = UserService(db)
+        user_service = UserService()
 
         # Find user by email
         user = user_service.get_by_email(email)
