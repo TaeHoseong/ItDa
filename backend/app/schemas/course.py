@@ -54,6 +54,8 @@ class CourseGenerateRequest(BaseModel):
 
 class DateCourse(BaseModel):
     """생성된 데이트 코스"""
+    course_id: Optional[str] = None  # DB 저장 시 UUID, 세션 임시 코스는 None
+    couple_id: Optional[str] = None  # 커플 ID (DB 저장 시 필수)
     date: str
     template: str
     slots: List[CourseSlot]
@@ -61,10 +63,14 @@ class DateCourse(BaseModel):
     total_duration: int  # 총 소요 시간 (분)
     start_time: str
     end_time: str
+    created_at: Optional[datetime] = None  # 생성 시각
+    updated_at: Optional[datetime] = None  # 수정 시각
 
     class Config:
         json_schema_extra = {
             "example": {
+                "course_id": "550e8400-e29b-41d4-a716-446655440000",
+                "couple_id": "couple_abc123",
                 "date": "2025-11-20",
                 "template": "full_day",
                 "slots": [
@@ -85,6 +91,8 @@ class DateCourse(BaseModel):
                 "total_distance": 3.5,
                 "total_duration": 420,
                 "start_time": "12:00",
-                "end_time": "19:00"
+                "end_time": "19:00",
+                "created_at": "2025-11-19T10:30:00",
+                "updated_at": "2025-11-19T10:30:00"
             }
         }
