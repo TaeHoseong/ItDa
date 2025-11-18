@@ -490,3 +490,139 @@ class CourseService:
             "exhibition": "culture_art",
         }
         return mapping.get(slot_type, "food_cafe")
+
+    # ========== CRUD Methods ==========
+
+    def create_course(self, db, user_id: str, course_data: dict) -> 'Course':
+        """
+        Create a new course in database
+
+        Args:
+            db: Database session
+            user_id: User ID (creator)
+            course_data: Course data from CourseCreate schema
+
+        Returns:
+            Created Course object
+        """
+        from app.models.course import Course
+        import uuid
+
+        course = Course(
+            course_id=str(uuid.uuid4()),
+            user_id=user_id,
+            couple_id=course_data.get('couple_id'),
+            date=course_data['date'],
+            template=course_data['template'],
+            slots=course_data['slots'],
+            total_distance=course_data.get('total_distance', 0.0),
+            total_duration=course_data.get('total_duration', 0),
+            start_time=course_data['start_time'],
+            end_time=course_data['end_time']
+        )
+
+        db.add(course)
+        db.commit()
+        db.refresh(course)
+        return course
+
+    def get_course(self, db, course_id: str) -> Optional['Course']:
+        """
+        Get course by ID
+
+        Args:
+            db: Database session
+            course_id: Course ID
+
+        Returns:
+            Course object or None
+        """
+        from app.models.course import Course
+        return db.query(Course).filter(Course.course_id == course_id).first()
+
+    def get_courses_by_user(self, db, user_id: str) -> List['Course']:
+        """
+        Get all courses by user ID
+
+        Args:
+            db: Database session
+            user_id: User ID
+
+        Returns:
+            List of Course objects
+        """
+        from app.models.course import Course
+        return db.query(Course).filter(Course.user_id == user_id).order_by(Course.created_at.desc()).all()
+
+    def get_courses_by_couple(self, db, couple_id: str) -> List['Course']:
+        """
+        Get all courses by couple ID
+
+        Args:
+            db: Database session
+            couple_id: Couple ID
+
+        Returns:
+            List of Course objects
+        """
+        from app.models.course import Course
+        return db.query(Course).filter(Course.couple_id == couple_id).order_by(Course.created_at.desc()).all()
+
+    def update_course(self, db, course_id: str, course_data: dict) -> Optional['Course']:
+        """
+        Update course
+
+        Args:
+            db: Database session
+            course_id: Course ID
+            course_data: Updated course data from CourseUpdate schema
+
+        Returns:
+            Updated Course object or None
+        """
+        from app.models.course import Course
+
+        course = self.get_course(db, course_id)
+        if not course:
+            return None
+
+        # Update fields if provided
+        if 'date' in course_data and course_data['date'] is not None:
+            course.date = course_data['date']
+        if 'template' in course_data and course_data['template'] is not None:
+            course.template = course_data['template']
+        if 'slots' in course_data and course_data['slots'] is not None:
+            course.slots = course_data['slots']
+        if 'total_distance' in course_data and course_data['total_distance'] is not None:
+            course.total_distance = course_data['total_distance']
+        if 'total_duration' in course_data and course_data['total_duration'] is not None:
+            course.total_duration = course_data['total_duration']
+        if 'start_time' in course_data and course_data['start_time'] is not None:
+            course.start_time = course_data['start_time']
+        if 'end_time' in course_data and course_data['end_time'] is not None:
+            course.end_time = course_data['end_time']
+
+        db.commit()
+        db.refresh(course)
+        return course
+
+    def delete_course(self, db, course_id: str) -> bool:
+        """
+        Delete course
+
+        Args:
+            db: Database session
+            course_id: Course ID
+
+        Returns:
+            True if deleted, False if not found
+        """
+        from app.models.course import Course
+
+        course = self.get_course(db, course_id)
+        if not course:
+            return False
+
+        db.delete(course)
+        db.commit()
+        return True
