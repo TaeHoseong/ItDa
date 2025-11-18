@@ -7,6 +7,8 @@ from app.core.database import get_db
 from app.core.security import verify_google_token, create_access_token
 from app.models.user import User
 from app.schemas.auth import GoogleLoginRequest, TokenResponse
+from app.schemas.user import UserCreate, UserResponse
+from app.services.user_service import UserService
 
 
 router = APIRouter()
@@ -82,4 +84,75 @@ async def google_login(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database operation failed: {str(e)}"
+        )
+
+
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register(
+    user_data: UserCreate,
+    db: Session = Depends(get_db)
+):
+    """
+    User registration endpoint (Phase 10.2)
+
+    Create a new user account with profile information.
+    Note: This endpoint expects the user to have already authenticated with Google OAuth,
+    and the user_id should be the Google ID.
+
+    Args:
+        user_data: UserCreate schema with registration info
+        db: Database session
+
+    Returns:
+        UserResponse with created user info
+
+    Raises:
+        HTTPException 400: If email or nickname already exists
+        HTTPException 500: If database operation fails
+    """
+    try:
+        user_service = UserService(db)
+
+        # Check if email already exists
+        existing_user = user_service.get_by_email(user_data.email)
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+
+        # Check if nickname already exists
+        existing_nickname = user_service.get_by_nickname(user_data.nickname)
+        if existing_nickname:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Nickname already taken"
+            )
+
+        # Generate user_id (for now, use email as placeholder)
+        # In production, this should come from Google OAuth
+        user_id = f"user_{user_data.email.replace('@', '_').replace('.', '_')}"
+
+        # Create user
+        user = user_service.create_user(user_data, user_id)
+
+        return UserResponse(
+            user_id=user.user_id,
+            email=user.email,
+            name=user.name,
+            picture=user.picture,
+            nickname=user.nickname,
+            birth_date=user.birth_date,
+            gender=user.gender,
+            couple_id=user.couple_id,
+            persona_completed=user.persona_completed
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
         )
