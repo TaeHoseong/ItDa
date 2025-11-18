@@ -156,3 +156,61 @@ async def register(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Registration failed: {str(e)}"
         )
+
+
+@router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
+async def login(
+    email: str,
+    db: Session = Depends(get_db)
+):
+    """
+    User login endpoint (Phase 10.2)
+
+    Login with email and receive JWT token.
+    Note: In production, this should be integrated with Google OAuth flow.
+
+    Args:
+        email: User's email address
+        db: Database session
+
+    Returns:
+        TokenResponse with access_token and user info
+
+    Raises:
+        HTTPException 404: If user not found
+        HTTPException 500: If database operation fails
+    """
+    try:
+        user_service = UserService(db)
+
+        # Find user by email
+        user = user_service.get_by_email(email)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found. Please register first."
+            )
+
+        # Generate JWT access token
+        access_token = create_access_token(user.user_id)
+
+        # Return token and user info
+        return TokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user={
+                "user_id": user.user_id,
+                "email": user.email,
+                "name": user.name,
+                "nickname": user.nickname,
+                "persona_completed": user.persona_completed
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Login failed: {str(e)}"
+        )
