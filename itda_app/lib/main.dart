@@ -7,7 +7,6 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'secrets.dart';
 import 'screens/auth/login_screen.dart';
-import 'screens/home_screen.dart';
 import 'screens/map_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/persona_screen.dart';
@@ -17,6 +16,7 @@ import 'providers/persona_chat_provider.dart';
 import 'providers/map_provider.dart';
 import 'providers/schedule_provider.dart';
 import 'providers/navigation_provider.dart';
+import 'providers/user_provider.dart';
 
 
 void main() async {
@@ -69,6 +69,9 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => NavigationProvider(),
         ),
+        ChangeNotifierProvider(
+        create: (_) => UserProvider(),
+      ),
         // 다른 Provider 있으면 여기에 추가
       ],
       child: const ItdaApp(),

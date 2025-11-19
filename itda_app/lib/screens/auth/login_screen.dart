@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:itda_app/main.dart';
 import 'signup_screen.dart';
-import '../survey_screen.dart';
 import '../../services/api_config.dart';
+import 'package:itda_app/services/auth_flow_helper.dart';
+import 'package:provider/provider.dart';
+import 'package:itda_app/providers/user_provider.dart';
+import 'package:itda_app/models/app_user.dart';
 
 // ▼ 추가: 구글/HTTP/보안 저장소
 import 'package:google_sign_in/google_sign_in.dart';
@@ -61,16 +63,56 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _login() {
-    if (_emailController.text.isNotEmpty &&
-        _passwordController.text.isNotEmpty) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const SurveyScreen()),
-      );
-    } else {
+  Future<AppUser> _performLoginRequest({
+    required String email,
+    required String password,
+  }) async {
+    // TODO(login_request): 실제 login_request API 연동
+    // final response = await http.post(
+    //   Uri.parse('${ApiConfig.baseUrl}/auth/login_request'),
+    //   headers: {'Content-Type': 'application/json'},
+    //   body: jsonEncode({'email': email, 'password': password}),
+    // );
+    // final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    // final userJson = decoded['user'] as Map<String, dynamic>;
+    // return AppUser.fromJson(userJson);
+
+    // 임시/테스트용 더미 리턴
+    return AppUser(
+      userId: 'dummy-id',
+      email: email,
+      surveyDone: false,
+    );
+  }
+
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('이메일과 비밀번호를 입력해주세요')),
+      );
+      return;
+    }
+
+    try {
+      final user = await _performLoginRequest(
+        email: email,
+        password: password,
+      );
+      if (!mounted) return;
+
+      context.read<UserProvider>().setUser(user);
+
+      PostAuthNavigator.routeWithUser(
+        context,
+        user: user,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('로그인 실패: $error')),
       );
     }
   }
@@ -114,6 +156,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (access == null) throw Exception('access_token 누락');
 
+      final appUser = user != null ? AppUser.fromJson(user) : null;
+
       // 🔍 디버그: 토큰 출력
       print('✅ 로그인 성공!');
       print('📝 Access Token: $access');
@@ -122,11 +166,17 @@ class _LoginScreenState extends State<LoginScreen> {
 
       await _session.save(access, refresh, userId);
 
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const SurveyScreen()),
-      );
+      if (appUser != null && mounted) {
+        context.read<UserProvider>().setUser(appUser);
+        print('routing with user');
+        print(appUser.surveyDone);
+        print(appUser.coupleMatched);
+        // 🔹 post-auth 라우팅
+        PostAuthNavigator.routeWithUser(
+          context,
+          user: appUser,
+        );
+      }
     } catch (e, stackTrace) {
       print('❌ Google Sign-In 에러: $e');
       print('❌ Stack trace: $stackTrace');

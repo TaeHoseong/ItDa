@@ -18,13 +18,16 @@ class UserApiService {
   /// - No access token found (user not logged in)
   /// - API request fails
   /// - Server returns error
-  static Future<void> submitSurvey(UserPersona persona) async {
+  static Future<void> submitSurvey(uid, UserPersona persona) async {
     // Get stored access token
     final token = await _storage.read(key: _kAccessToken);
 
     if (token == null) {
       throw Exception('로그인이 필요합니다. 토큰이 없습니다.');
     }
+    
+    final body_json = persona.toJson();
+    body_json["user_id"] = uid;
 
     // Make API request
     final response = await http.put(
@@ -33,7 +36,7 @@ class UserApiService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer $token',
       },
-      body: jsonEncode(persona.toJson()),
+      body: jsonEncode(body_json),
     );
 
     if (response.statusCode != 200) {
