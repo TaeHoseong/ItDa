@@ -12,13 +12,14 @@ class UserService:
         """Initialize UserService with Supabase client"""
         self.supabase = get_supabase()
 
-    def create_user(self, user_data: UserCreate, user_id: str) -> Dict[str, Any]:
+    def create_user(self, user_data: UserCreate, user_id: str, password_hash: Optional[str] = None) -> Dict[str, Any]:
         """
         Create a new user
 
         Args:
             user_data: UserCreate schema with user information
             user_id: User ID (Google ID from OAuth or generated UUID)
+            password_hash: Bcrypt password hash (None for Google OAuth users)
 
         Returns:
             Created user record as dictionary
@@ -36,6 +37,7 @@ class UserService:
                 "nickname": user_data.nickname,
                 "birthday": user_data.birthday,
                 "gender": user_data.gender,
+                "password_hash": password_hash,  # NULL for Google OAuth
                 "survey_done": False,
                 "couple_id": None
             })
