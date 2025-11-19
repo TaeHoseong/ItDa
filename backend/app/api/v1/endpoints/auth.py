@@ -1,12 +1,13 @@
 """
 Authentication endpoints
 """
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.supabase_client import get_supabase
 from app.core.security import verify_google_token, create_access_token
 from app.models.user import User
-from app.schemas.auth import GoogleLoginRequest, TokenResponse
+from app.schemas.auth import GoogleLoginRequest, TokenResponse, UserRegisterRequest
 from app.schemas.user import UserCreate, UserResponse
 from app.services.user_service import UserService
 
@@ -109,23 +110,21 @@ async def google_login(request: GoogleLoginRequest):
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(
-    user_data: UserCreate,
+    user_data: UserRegisterRequest,
 ):
     """
-    User registration endpoint (Phase 10.2)
+    User registration endpoint with password (Phase 10.2.2)
 
-    Create a new user account with profile information.
-    Note: This endpoint expects the user to have already authenticated with Google OAuth,
-    and the user_id should be the Google ID.
+    Create a new user account with email and password.
 
     Args:
-        user_data: UserCreate schema with registration info
+        user_data: UserRegisterRequest with email, password, and optional profile info
 
     Returns:
         UserResponse with created user info
 
     Raises:
-        HTTPException 400: If email or nickname already exists
+        HTTPException 400: If email already exists
         HTTPException 500: If database operation fails
     """
     try:
@@ -134,25 +133,47 @@ async def register(
         # Check if email already exists
         existing_user = user_service.get_by_email(user_data.email)
         if existing_user:
+            # Check if it's a Google OAuth account
+            if existing_user.get("password_hash") is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already registered with Google login. Please sign in with Google."
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
             )
 
-        # Check if nickname already exists
-        existing_nickname = user_service.get_by_nickname(user_data.nickname)
-        if existing_nickname:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Nickname already taken"
-            )
+        # Check if nickname already exists (if provided)
+        if user_data.nickname:
+            existing_nickname = user_service.get_by_nickname(user_data.nickname)
+            if existing_nickname:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Nickname already taken"
+                )
 
-        # Generate user_id (for now, use email as placeholder)
-        # In production, this should come from Google OAuth
+        # Generate user_id from email
         user_id = f"user_{user_data.email.replace('@', '_').replace('.', '_')}"
 
-        # Create user
-        user = user_service.create_user(user_data, user_id)
+        # Hash password with bcrypt
+        password_hash = bcrypt.hashpw(
+            user_data.password.encode('utf-8'),
+            bcrypt.gensalt()
+        ).decode('utf-8')
+
+        # Convert UserRegisterRequest to UserCreate for service layer
+        user_create_data = UserCreate(
+            email=user_data.email,
+            name=user_data.name,
+            nickname=user_data.nickname,
+            birthday=user_data.birthday,
+            gender=user_data.gender,
+            picture=None
+        )
+
+        # Create user with password hash
+        user = user_service.create_user(user_create_data, user_id, password_hash)
 
         return UserResponse(
             user_id=user["user_id"],
