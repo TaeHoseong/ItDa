@@ -108,7 +108,7 @@ async def google_login(request: GoogleLoginRequest):
         )
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserRegisterRequest,
 ):
@@ -121,7 +121,7 @@ async def register(
         user_data: UserRegisterRequest with email, password, and optional profile info
 
     Returns:
-        UserResponse with created user info
+        TokenResponse with access_token and user info
 
     Raises:
         HTTPException 400: If email already exists
@@ -175,16 +175,27 @@ async def register(
         # Create user with password hash
         user = user_service.create_user(user_create_data, user_id, password_hash)
 
-        return UserResponse(
-            user_id=user["user_id"],
-            email=user["email"],
-            name=user.get("name"),
-            picture=user.get("picture"),
-            nickname=user.get("nickname"),
-            birthday=user.get("birthday"),
-            gender=user.get("gender"),
-            couple_id=user.get("couple_id"),
-            survey_done=user.get("survey_done", False)
+        # Generate JWT access token and store in database
+        access_token = create_access_token(user["user_id"])
+        supabase = get_supabase()
+        response = (
+            supabase.table("users")
+            .update({"token": access_token})
+            .eq("user_id", user["user_id"])
+            .execute()
+        )
+        updated_user = response.data[0]
+
+        return TokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user={
+                "user_id": updated_user["user_id"],
+                "email": updated_user["email"],
+                "name": updated_user.get("name"),
+                "nickname": updated_user.get("nickname"),
+                "survey_done": updated_user.get("survey_done", False)
+            }
         )
 
     except HTTPException:
@@ -245,19 +256,27 @@ async def login(
                 detail="Invalid email or password"
             )
 
-        # Generate JWT access token
+        # Generate JWT access token and store in database
         access_token = create_access_token(user["user_id"])
+        supabase = get_supabase()
+        response = (
+            supabase.table("users")
+            .update({"token": access_token})
+            .eq("user_id", user["user_id"])
+            .execute()
+        )
+        updated_user = response.data[0]
 
         # Return token and user info
         return TokenResponse(
             access_token=access_token,
             token_type="bearer",
             user={
-                "user_id": user["user_id"],
-                "email": user["email"],
-                "name": user.get("name"),
-                "nickname": user.get("nickname"),
-                "survey_done": user.get("survey_done", False)
+                "user_id": updated_user["user_id"],
+                "email": updated_user["email"],
+                "name": updated_user.get("name"),
+                "nickname": updated_user.get("nickname"),
+                "survey_done": updated_user.get("survey_done", False)
             }
         )
 
