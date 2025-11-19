@@ -6,6 +6,7 @@ python-multipart==0.0.6
 # Pydantic
 pydantic==2.12.4
 pydantic-settings==2.1.0
+email-validator==2.3.0
 
 # Environment
 python-dotenv==1.0.0
