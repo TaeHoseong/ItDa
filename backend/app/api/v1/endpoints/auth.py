@@ -120,7 +120,6 @@ async def register(
 
     Args:
         user_data: UserCreate schema with registration info
-        db: Database session
 
     Returns:
         UserResponse with created user info
@@ -156,15 +155,15 @@ async def register(
         user = user_service.create_user(user_data, user_id)
 
         return UserResponse(
-            user_id=user.user_id,
-            email=user.email,
-            name=user.name,
-            picture=user.picture,
-            nickname=user.nickname,
-            birthday=user.birthday,
-            gender=user.gender,
-            couple_id=user.couple_id,
-            survey_done=user.survey_done
+            user_id=user["user_id"],
+            email=user["email"],
+            name=user.get("name"),
+            picture=user.get("picture"),
+            nickname=user.get("nickname"),
+            birthday=user.get("birthday"),
+            gender=user.get("gender"),
+            couple_id=user.get("couple_id"),
+            survey_done=user.get("survey_done", False)
         )
 
     except HTTPException:
@@ -188,7 +187,6 @@ async def login(
 
     Args:
         email: User's email address
-        db: Database session
 
     Returns:
         TokenResponse with access_token and user info
@@ -209,18 +207,18 @@ async def login(
             )
 
         # Generate JWT access token
-        access_token = create_access_token(user.user_id)
+        access_token = create_access_token(user["user_id"])
 
         # Return token and user info
         return TokenResponse(
             access_token=access_token,
             token_type="bearer",
             user={
-                "user_id": user.user_id,
-                "email": user.email,
-                "name": user.name,
-                "nickname": user.nickname,
-                "survey_done": user.survey_done
+                "user_id": user["user_id"],
+                "email": user["email"],
+                "name": user.get("name"),
+                "nickname": user.get("nickname"),
+                "survey_done": user.get("survey_done", False)
             }
         )
 
