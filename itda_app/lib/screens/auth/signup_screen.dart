@@ -1,5 +1,13 @@
+﻿import 'dart:convert';
+import 'package:http/http.dart' as http;
+
 import 'package:flutter/material.dart';
-import 'couple_connect_screen.dart';
+import 'package:provider/provider.dart';
+
+import '../../services/api_config.dart';
+import 'package:itda_app/services/auth_flow_helper.dart';
+import 'package:itda_app/providers/user_provider.dart';
+import 'package:itda_app/models/app_user.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -25,27 +33,86 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  void _signup() {
-    if (_emailController.text.isEmpty ||
-        _passwordController.text.isEmpty ||
-        _nameController.text.isEmpty) {
+  // signup_screen.dart 상단에 이미 있는 부분 수정
+
+  Future<AppUser> _performCreateUserRequest({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    // TODO(create_user): 실제 create_user 엔드포인트에 맞게 수정
+    final resp = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/auth/create_user'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'email': email,
+        'password': password,
+        'name': name,
+        // nickname, birthday, gender 등 필요하면 여기에 추가
+      }),
+    );
+
+    if (resp.statusCode != 200) {
+      throw Exception('회원가입 실패: ${resp.body}');
+    }
+
+    final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
+    final userJson = decoded['user'] as Map<String, dynamic>;
+
+    // 🔹 백엔드 UserResponse 기반 AppUser로 변환
+    return AppUser.fromJson(userJson);
+  }
+
+
+  bool _loading = false;
+
+  Future<void> _signup() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final passwordConfirm = _passwordConfirmController.text;
+    final name = _nameController.text.trim();
+
+    if (email.isEmpty || password.isEmpty || name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('모든 항목을 입력해주세요')),
       );
       return;
     }
 
-    if (_passwordController.text != _passwordConfirmController.text) {
+    if (password != passwordConfirm) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('비밀번호가 일치하지 않습니다')),
       );
       return;
     }
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const CoupleConnectScreen()),
-    );
+    setState(() => _loading = true);
+
+    try {
+      final appUser = await _performCreateUserRequest(
+        name: name,
+        email: email,
+        password: password,
+      );
+
+      if (!mounted) return;
+
+      // 1) Provider에 저장
+      context.read<UserProvider>().setUser(appUser);
+
+      // 2) 플래그 기반 네비게이션
+      PostAuthNavigator.routeWithUser(
+        context,
+        user: appUser,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('회원가입 실패: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -148,7 +215,7 @@ class _SignupScreenState extends State<SignupScreen> {
               const SizedBox(height: 32),
 
               ElevatedButton(
-                onPressed: _signup,
+                onPressed: _loading ? null : _signup,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFFD9180),
                   foregroundColor: Colors.white,
@@ -169,3 +236,4 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 }
+

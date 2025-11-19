@@ -1,6 +1,12 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:itda_app/main.dart'; // MainScreen 사용
+
+import '../services/user_api_service.dart';
+import '../services/auth_flow_helper.dart';
+import '../providers/user_provider.dart';
+import '../models/user_persona.dart';
 
 /// SurveyScreen (4-page wizard + 5-star Likert)
 /// - 4개 섹션(페이지): 1) mainCategory, 2) atmosphere, 3) experienceType, 4) spaceCharacteristics
@@ -263,10 +269,13 @@ class _SurveyScreenState extends State<SurveyScreen> {
 
   // ---------- Submit (→ ResultPage) ----------
   Future<void> _submit() async {
+    if (_submitting) return;
     setState(() => _submitting = true);
 
-    String f(double v) => v.toStringAsFixed(2);
-    final pretty = '''
+    try {
+      // 1) 별점 → 0.0~1.0 스코어 문자열 (기존 pretty 그대로 유지)
+      String f(double v) => v.toStringAsFixed(2);
+      final pretty = '''
 places = np.array([[ 
     ${f(_scoreFromStars(foodCafe))}, ${f(_scoreFromStars(cultureArt))}, ${f(_scoreFromStars(activitySports))}, ${f(_scoreFromStars(natureHealing))}, ${f(_scoreFromStars(craftExperience))}, ${f(_scoreFromStars(shopping))},
     ${f(_scoreFromStars(quiet))}, ${f(_scoreFromStars(romantic))}, ${f(_scoreFromStars(trendy))}, ${f(_scoreFromStars(privateVibe))}, ${f(_scoreFromStars(artistic))}, ${f(_scoreFromStars(energetic))},
@@ -274,20 +283,62 @@ places = np.array([[
     ${f(_scoreFromStars(indoorRatio))}, ${f(_scoreFromStars(crowdednessExpected))}, ${f(_scoreFromStars(photoWorthiness))}, ${f(_scoreFromStars(scenicView))},
 ]])''';
 
-    final personaResult = _buildPersonaResult();
+      // 2) 설문 결과 → UserPersona 모델 (필드명은 너 user_persona.dart에 맞게 조정)
+      final personaModel = UserPersona(
+        foodCafe: _scoreFromStars(foodCafe),
+        cultureArt: _scoreFromStars(cultureArt),
+        activitySports: _scoreFromStars(activitySports),
+        natureHealing: _scoreFromStars(natureHealing),
+        craftExperience: _scoreFromStars(craftExperience),
+        shopping: _scoreFromStars(shopping),
+        quiet: _scoreFromStars(quiet),
+        romantic: _scoreFromStars(romantic),
+        trendy: _scoreFromStars(trendy),
+        privateVibe: _scoreFromStars(privateVibe),
+        artistic: _scoreFromStars(artistic),
+        energetic: _scoreFromStars(energetic),
+        passiveEnjoyment: _scoreFromStars(passiveEnjoyment),
+        activeParticipation: _scoreFromStars(activeParticipation),
+        socialBonding: _scoreFromStars(socialBonding),
+        relaxationFocused: _scoreFromStars(relaxationFocused),
+        indoorRatio: _scoreFromStars(indoorRatio),
+        crowdednessExpected: _scoreFromStars(crowdednessExpected),
+        photoWorthiness: _scoreFromStars(photoWorthiness),
+        scenicView: _scoreFromStars(scenicView),
+      );
 
-    if (!mounted) return;
-    setState(() => _submitting = false);
+      // 3) 백엔드에 설문 저장
+      final userProvider = context.read<UserProvider>();
+      await UserApiService.submitSurvey(userProvider.user?.userId, personaModel);
+      // 4) UserProvider에서 surveyDone 플래그만 true로 변경
+      
+      if (userProvider.user != null) {
+        userProvider.markSurveyDone();
+      }
 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ResultPage(
-          pretty: pretty,
-          persona: personaResult,
+      // 5) 로컬에서 페르소나 분석 결과 생성 (기존 로직 유지)
+      final personaResult = _buildPersonaResult();
+
+      if (!mounted) return;
+      setState(() => _submitting = false);
+
+      // 6) 결과 페이지로 이동 (MainScreen이 아니라 ResultPage → 여기서 확인 버튼으로 PostAuthNavigator 태움)
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ResultPage(
+            pretty: pretty,
+            persona: personaResult,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('설문 저장 중 오류가 발생했습니다: $e')),
+      );
+    }
   }
 
   // ---------- Reusable UI ----------
@@ -735,12 +786,23 @@ class ResultPage extends StatelessWidget {
                     ),
                   ),
                   onPressed: () {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(
-                        builder: (_) => const MainScreen(),
-                      ),
-                      (route) => false,
-                    );
+                    final userProvider = context.read<UserProvider>();
+                    final user = userProvider.user;
+
+                    if (user != null) {
+                      PostAuthNavigator.routeWithUser(
+                        context,
+                        user: user,
+                      );
+                    } else {
+                      // 혹시 모를 예외 상황: 유저 정보가 없으면 그냥 메인으로 fallback
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (_) => const MainScreen(),
+                        ),
+                        (route) => false,
+                      );
+                    }
                   },
                 ),
               ),

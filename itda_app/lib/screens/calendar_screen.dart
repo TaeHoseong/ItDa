@@ -460,10 +460,18 @@ class _CalendarScreenState extends State<CalendarScreen> {
               ),
             ),
             TextButton(
-              onPressed: () {
+              onPressed: () async {
                 final scheduleProvider = context.read<ScheduleProvider>();
-                scheduleProvider.removeEvent(day, index);
-                Navigator.of(ctx).pop();
+                try {
+                  await scheduleProvider.deleteScheduleWithBackend(day, index);
+                  Navigator.of(ctx).pop();
+                } catch (_) {
+                  Navigator.of(ctx).pop();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('일정 삭제에 실패했습니다. 다시 시도해주세요.')),
+                  );
+                }
               },
               child: const Text(
                 '삭제',
@@ -657,11 +665,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
                         // ScheduleProvider를 사용해 일정 수정
                         final scheduleProvider = context.read<ScheduleProvider>();
-                        scheduleProvider.updateEvent(
-                          normalized,
-                          index,
-                          title,
-                          timeString,
+                        scheduleProvider.updateScheduleWithBackend(
+                          day: normalized,
+                          index: index,
+                          title: title,
+                          time: timeString,
                           placeName: loc.isEmpty ? null : loc,
                           latitude: schedule.latitude,
                           longitude: schedule.longitude,
@@ -836,10 +844,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
                         // ScheduleProvider를 사용해 일정 추가
                         final scheduleProvider = context.read<ScheduleProvider>();
-                        scheduleProvider.addEvent(
-                          normalized,
-                          title,
-                          timeString,
+                        scheduleProvider.createScheduleWithBackend(
+                          day: normalized,
+                          title: title,
+                          time: timeString,
                           placeName: loc.isEmpty ? null : loc,
                         );
 
