@@ -67,22 +67,27 @@ class _LoginScreenState extends State<LoginScreen> {
     required String email,
     required String password,
   }) async {
-    // TODO(login_request): 실제 login_request API 연동
-    // final response = await http.post(
-    //   Uri.parse('${ApiConfig.baseUrl}/auth/login_request'),
-    //   headers: {'Content-Type': 'application/json'},
-    //   body: jsonEncode({'email': email, 'password': password}),
-    // );
-    // final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-    // final userJson = decoded['user'] as Map<String, dynamic>;
-    // return AppUser.fromJson(userJson);
-
-    // 임시/테스트용 더미 리턴
-    return AppUser(
-      userId: 'dummy-id',
-      email: email,
-      surveyDone: false,
+    final resp = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/auth/login'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'password': password}),
     );
+
+    if (resp.statusCode != 200) {
+      throw Exception('로그인 실패: ${resp.body}');
+    }
+
+    final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
+
+    // Save access token to secure storage
+    final accessToken = decoded['access_token'] as String;
+    final userJson = decoded['user'] as Map<String, dynamic>;
+    final userId = userJson['user_id'] as String?;
+
+    await _session.save(accessToken, null, userId);
+
+    // Extract user from TokenResponse
+    return AppUser.fromJson(userJson);
   }
 
   Future<void> _login() async {
