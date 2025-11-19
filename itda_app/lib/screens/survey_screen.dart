@@ -309,9 +309,9 @@ places = np.array([[
 
       // 3) 백엔드에 설문 저장
       final userProvider = context.read<UserProvider>();
-      await UserApiService.submitSurvey(userProvider.user?.userId, personaModel);
+      // await UserApiService.submitSurvey(userProvider.user?.userId, personaModel);
+
       // 4) UserProvider에서 surveyDone 플래그만 true로 변경
-      
       if (userProvider.user != null) {
         userProvider.markSurveyDone();
       }
@@ -338,6 +338,7 @@ places = np.array([[
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('설문 저장 중 오류가 발생했습니다: $e')),
       );
+
     }
   }
 
