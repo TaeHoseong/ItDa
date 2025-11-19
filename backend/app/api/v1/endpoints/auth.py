@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.supabase_client import get_supabase
 from app.core.security import verify_google_token, create_access_token
 from app.models.user import User
-from app.schemas.auth import GoogleLoginRequest, TokenResponse, UserRegisterRequest
+from app.schemas.auth import GoogleLoginRequest, TokenResponse, UserRegisterRequest, UserLoginRequest
 from app.schemas.user import UserCreate, UserResponse
 from app.services.user_service import UserService
 
@@ -198,33 +198,51 @@ async def register(
 
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 async def login(
-    email: str,
+    login_data: UserLoginRequest,
 ):
     """
-    User login endpoint (Phase 10.2)
+    User login endpoint with password verification (Phase 10.2.2)
 
-    Login with email and receive JWT token.
-    Note: In production, this should be integrated with Google OAuth flow.
+    Login with email and password, receive JWT token.
 
     Args:
-        email: User's email address
+        login_data: UserLoginRequest with email and password
 
     Returns:
         TokenResponse with access_token and user info
 
     Raises:
         HTTPException 404: If user not found
+        HTTPException 401: If password is incorrect
+        HTTPException 400: If account uses Google OAuth
         HTTPException 500: If database operation fails
     """
     try:
         user_service = UserService()
 
         # Find user by email
-        user = user_service.get_by_email(email)
+        user = user_service.get_by_email(login_data.email)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found. Please register first."
+            )
+
+        # Check if this is a Google OAuth account (no password)
+        if user.get("password_hash") is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This account uses Google login. Please sign in with Google."
+            )
+
+        # Verify password
+        if not bcrypt.checkpw(
+            login_data.password.encode('utf-8'),
+            user["password_hash"].encode('utf-8')
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
             )
 
         # Generate JWT access token
