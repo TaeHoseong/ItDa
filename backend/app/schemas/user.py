@@ -4,13 +4,13 @@ from datetime import datetime
 
 
 class UserCreate(BaseModel):
-    """Schema for user registration"""
+    """Schema for user registration (used internally by service layer)"""
     email: str
-    name: str
-    nickname: str
-    birthday: str  # YYYY-MM-DD format
-    gender: str  # "male" or "female"
-    picture: Optional[str] = None  # Profile picture URL from OAuth
+    name: Optional[str] = None
+    nickname: Optional[str] = None
+    birthday: Optional[str] = None  # YYYY-MM-DD format
+    gender: Optional[str] = None    # "M" or "F"
+    picture: Optional[str] = None   # Profile picture URL from OAuth
 
     class Config:
         json_schema_extra = {
@@ -19,7 +19,7 @@ class UserCreate(BaseModel):
                 "name": "홍길동",
                 "nickname": "gildong",
                 "birthday": "1990-01-01",
-                "gender": "male",
+                "gender": "M",
                 "picture": "https://example.com/photo.jpg"
             }
         }

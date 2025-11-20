@@ -214,7 +214,6 @@ class ScheduleProvider extends ChangeNotifier {
       _error = e.toString();
       notifyListeners();
       debugPrint('[ScheduleProvider] 일정 생성 실패: $e');
-      rethrow;
     }
   }
 

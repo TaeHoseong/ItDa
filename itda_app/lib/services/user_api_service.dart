@@ -27,8 +27,7 @@ class UserApiService {
     }
     
     final body_json = persona.toJson();
-    body_json["user_id"] = uid;
-
+    
     // Make API request
     final response = await http.put(
       Uri.parse('${ApiConfig.baseUrl}/users/survey'),

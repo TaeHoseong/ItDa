@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../services/api_config.dart';
 import 'package:itda_app/services/auth_flow_helper.dart';
@@ -52,13 +53,13 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  Future<AppUser> _performCreateUserRequest({
+  Future<AppUser> _performRegisterRequest({
     required String name,
     required String email,
     required String password,
   }) async {
     final resp = await http.post(
-      Uri.parse('${ApiConfig.baseUrl}/auth/create_user'),
+      Uri.parse('${ApiConfig.baseUrl}/auth/register'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'email': email,
@@ -67,13 +68,19 @@ class _SignupScreenState extends State<SignupScreen> {
       }),
     );
 
-    if (resp.statusCode != 200) {
+    if (resp.statusCode != 201) {
       throw Exception('회원가입 실패: ${resp.body}');
     }
 
     final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
-    final userJson = decoded['user'] as Map<String, dynamic>;
 
+    // Save access token to secure storage
+    final accessToken = decoded['access_token'] as String;
+    const storage = FlutterSecureStorage();
+    await storage.write(key: 'access_token', value: accessToken);
+
+    // Extract user from TokenResponse
+    final userJson = decoded['user'] as Map<String, dynamic>;
     return AppUser.fromJson(userJson);
   }
 
@@ -104,7 +111,7 @@ class _SignupScreenState extends State<SignupScreen> {
     setState(() => _loading = true);
 
     try {
-      final appUser = await _performCreateUserRequest(
+      final appUser = await _performRegisterRequest(
         name: name,
         email: email,
         password: password,
