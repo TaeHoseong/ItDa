@@ -2,7 +2,6 @@
 Authentication endpoints
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from app.core.supabase_client import get_supabase
 from app.core.security import verify_google_token, create_access_token
 from app.models.user import User
@@ -120,7 +119,6 @@ async def register(
 
     Args:
         user_data: UserCreate schema with registration info
-        db: Database session
 
     Returns:
         UserResponse with created user info
@@ -188,7 +186,6 @@ async def login(
 
     Args:
         email: User's email address
-        db: Database session
 
     Returns:
         TokenResponse with access_token and user info

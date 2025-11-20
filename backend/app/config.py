@@ -4,7 +4,6 @@ from functools import lru_cache
 class Settings(BaseSettings):
     PROJECT_NAME: str = "ItDa Backend"
     API_V1_STR: str = "/api/v1"
-    DATABASE_URL: str = "sqlite:///./test.db"
 
     # OpenAI
     OPENAI_API_KEY: str

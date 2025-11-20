@@ -1,7 +1,6 @@
 import numpy as np
 import os
 import json
-import sqlite3
 from app.core.supabase_client import get_supabase
 from dotenv import load_dotenv
 import math

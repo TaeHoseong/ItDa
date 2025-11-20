@@ -3,7 +3,6 @@ User management endpoints
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
 from app.core.supabase_client import get_supabase
 from app.core.security import verify_token
 from app.models.user import User
@@ -115,7 +114,7 @@ async def submit_survey(
     """
     supabase = get_supabase()
     try:
-        user_service = UserService(db)
+        user_service = UserService()
 
         # Update persona using service layer
         updated_user = user_service.update_persona(current_user.user_id, survey_data)
