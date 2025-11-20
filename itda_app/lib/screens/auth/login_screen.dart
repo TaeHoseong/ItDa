@@ -6,6 +6,9 @@ import 'package:provider/provider.dart';
 import 'package:itda_app/providers/user_provider.dart';
 import 'package:itda_app/models/app_user.dart';
 
+// ▼ 추가: Supabase
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 // ▼ 추가: 구글/HTTP/보안 저장소
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
@@ -64,7 +67,30 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  Future<AppUser> _performLoginRequest({
+  // ===========================
+  // 🔹 Supabase에서 유저 정보 로드
+  // ===========================
+  Future<AppUser> _loadUserFromSupabase(String userId) async {
+    final supabase = Supabase.instance.client;
+
+    final data = await supabase
+        .from('users')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    if (data == null) {
+      throw Exception('유저 정보를 찾을 수 없습니다. (user_id: $userId)');
+    }
+
+    // Supabase users 테이블 구조가 AppUser.fromJson과 동일하다고 가정
+    return AppUser.fromJson(Map<String, dynamic>.from(data));
+  }
+
+  // ==========================================
+  // 🔹 이메일/비밀번호 로그인 → user_id만 반환
+  // ==========================================
+  Future<String> _performLoginRequest({
     required String email,
     required String password,
   }) async {
@@ -80,17 +106,24 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
 
-    // Save access token to secure storage
+    // access token + user_id 저장
     final accessToken = decoded['access_token'] as String;
     final userJson = decoded['user'] as Map<String, dynamic>;
     final userId = userJson['user_id'] as String?;
 
+    if (userId == null) {
+      throw Exception('로그인 응답에 user_id가 없습니다.');
+    }
+
     await _session.save(accessToken, null, userId);
 
-    // Extract user from TokenResponse
-    return AppUser.fromJson(userJson);
+    // 이 함수는 이제 user_id만 넘겨준다
+    return userId;
   }
 
+  // =====================
+  // 🔹 이메일/비밀번호 로그인
+  // =====================
   Future<void> _login() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -103,17 +136,24 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     try {
-      final user = await _performLoginRequest(
+      // 1) 백엔드 로그인 → user_id 획득
+      final userId = await _performLoginRequest(
         email: email,
         password: password,
       );
+
+      // 2) Supabase users 테이블에서 실제 유저 정보 가져오기
+      final appUser = await _loadUserFromSupabase(userId);
+
       if (!mounted) return;
 
-      context.read<UserProvider>().setUser(user);
+      // 3) UserProvider에 저장
+      context.read<UserProvider>().setUser(appUser);
 
+      // 4) 설문/커플 매칭 상태에 따라 라우팅
       PostAuthNavigator.routeWithUser(
         context,
-        user: user,
+        user: appUser,
       );
     } catch (error) {
       if (!mounted) return;
@@ -123,7 +163,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // ▼ Route A – Google Sign-In
+  // =====================
+  // 🔹 Google Sign-In
+  // =====================
   Future<void> _handleGoogleSignIn() async {
     setState(() => _googleLoading = true);
     try {
@@ -153,28 +195,34 @@ class _LoginScreenState extends State<LoginScreen> {
         print('❌ 서버 에러: ${resp.body}');
         throw Exception('서버 인증 실패 (${resp.statusCode}) ${resp.body}');
       }
+
       final body = jsonDecode(resp.body) as Map<String, dynamic>;
       final access = body['access_token'] as String?;
       final refresh = body['refresh_token'] as String?;
       final user = body['user'] as Map<String, dynamic>?;
+
       final userId = user?['user_id'] as String?;
 
       if (access == null) throw Exception('access_token 누락');
-
-      final appUser = user != null ? AppUser.fromJson(user) : null;
+      if (userId == null) throw Exception('user_id 누락');
 
       print('✅ 로그인 성공!');
       print('📝 Access Token: $access');
       print('👤 User ID: $userId');
       print('📧 Email: ${user?['email']}');
 
+      // 세션 저장
       await _session.save(access, refresh, userId);
 
-      if (appUser != null && mounted) {
+      // 🔹 Supabase에서 실제 유저 정보 가져오기
+      final appUser = await _loadUserFromSupabase(userId);
+
+      if (mounted) {
         context.read<UserProvider>().setUser(appUser);
-        print('routing with user');
+        print('routing with user (from Supabase)');
         print(appUser.surveyDone);
         print(appUser.coupleMatched);
+
         PostAuthNavigator.routeWithUser(
           context,
           user: appUser,
@@ -254,7 +302,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: TextStyle(
                         fontSize: 14,
                         height: 1.4,
-                        color: Color(0xFF7A6C66),//Colors.grey[600],
+                        color: Color(0xFF7A6C66), //Colors.grey[600],
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -439,7 +487,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   side: const BorderSide(color: Color(0xFFE0E0E0)),
-                  foregroundColor: Color(0xFF6B4A3C),
+                  foregroundColor: const Color(0xFF6B4A3C),
                   backgroundColor: Colors.white,
                 ),
               ),
