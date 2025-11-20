@@ -23,7 +23,6 @@ def get_current_user(
 
     Args:
         credentials: HTTP Bearer credentials from header
-        supabse: Database session
 
     Returns:
         User object

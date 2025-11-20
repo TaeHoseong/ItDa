@@ -14,7 +14,7 @@ def create_schedule(
     schedule_data: ScheduleCreate,
     current_user: dict = Depends(get_current_user),
 ):
-    supabse = get_supabase()
+    supabase = get_supabase()
     """일정 생성 (JWT 인증 필요)"""
     service = ScheduleService()
     user_id = current_user["user_id"]
