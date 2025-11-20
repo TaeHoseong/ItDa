@@ -17,6 +17,7 @@ import 'providers/map_provider.dart';
 import 'providers/course_provider.dart';
 import 'providers/navigation_provider.dart';
 import 'providers/user_provider.dart';
+import 'providers/chat_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -83,6 +84,23 @@ void main() async {
         ),
         ChangeNotifierProvider(
           create: (_) => NavigationProvider(),
+        ),
+        ChangeNotifierProxyProvider<UserProvider, ChatProvider>(
+          create: (_) => ChatProvider(Supabase.instance.client),
+          update: (_, userProvider, chatProvider) {
+            chatProvider ??= ChatProvider(Supabase.instance.client);
+
+            final user = userProvider.user;
+            final userId = user?.userId;
+            final coupleId = user?.coupleId;
+
+            chatProvider.configure(
+              userId: userId,
+              coupleId: coupleId,
+            );
+
+            return chatProvider;
+          },
         ),
       ],
       child: const ItdaApp(),

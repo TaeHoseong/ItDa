@@ -1,12 +1,10 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+
+import 'package:itda_app/providers/user_provider.dart';
 
 import 'package:itda_app/main.dart';
-import 'package:itda_app/services/api_config.dart';
-import 'package:itda_app/services/auth_flow_helper.dart';
 import 'package:itda_app/services/user_api_service.dart';
 
 // ===================== 공통: 대문자 포맷터 =====================
@@ -444,10 +442,21 @@ class _EnterCodeScreenState extends State<EnterCodeScreen> {
     setState(() => _submitting = true);
 
     try {
-      // 백엔드에 코드 전송
-      await UserApiService.connectWithMatchCode(code);
+      // 1) 백엔드에 코드 전송 + 응답 받기
+      final res = await UserApiService.connectWithMatchCode(code);
 
       if (!mounted) return;
+
+      // 2) 응답에서 couple_id 꺼내기
+      final coupleId = res['couple_id'] as String?;
+      if (coupleId != null) {
+        // 3) UserProvider 상태 업데이트
+        context.read<UserProvider>().setCoupleId(coupleId);
+      }
+
+      // (선택) 나중에 /users/me 다시 불러와서 전체 User 갱신하고 싶으면
+      // UserApiService.fetchMe() 같은 거 만들어서 setUser(...) 호출하면 됨.
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('커플 연동이 완료되었습니다!')),
       );
