@@ -4,7 +4,7 @@ Course management endpoints (Phase 10.4)
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 
-from app.api.v1.endpoints.users import get_current_user
+from app.core.dependencies import get_current_user
 from app.schemas.course import CourseCreate, CourseUpdate, CourseResponse
 from app.services.course_service import CourseService
 

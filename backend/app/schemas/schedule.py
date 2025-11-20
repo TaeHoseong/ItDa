@@ -6,7 +6,7 @@ from typing import Optional
 class ScheduleBase(BaseModel):
     """일정 기본 스키마"""
     title: str
-    date: datetime
+    date: str  # YYYY-MM-DD or ISO format
     time: Optional[str] = None
     place_name: Optional[str] = None
     latitude: Optional[float] = None
@@ -22,7 +22,7 @@ class ScheduleCreate(ScheduleBase):
 class ScheduleUpdate(BaseModel):
     """일정 수정 요청 스키마 (모든 필드 optional)"""
     title: Optional[str] = None
-    date: Optional[datetime] = None
+    date: Optional[str] = None  # YYYY-MM-DD or ISO format
     time: Optional[str] = None
     place_name: Optional[str] = None
     latitude: Optional[float] = None
@@ -32,10 +32,10 @@ class ScheduleUpdate(BaseModel):
 
 class ScheduleResponse(ScheduleBase):
     """일정 응답 스키마"""
-    id: int
+    id: str  # course_id (UUID)
     user_id: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: str  # ISO timestamp
+    updated_at: Optional[str] = None  # ISO timestamp
 
     class Config:
         from_attributes = True

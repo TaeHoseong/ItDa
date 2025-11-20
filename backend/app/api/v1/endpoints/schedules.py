@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
-from app.core.security import get_current_user
+from app.core.dependencies import get_current_user
 from app.schemas.schedule import ScheduleCreate, ScheduleUpdate, ScheduleResponse
 from app.services.schedule_service import ScheduleService
 
@@ -37,7 +37,7 @@ def get_schedules(
 
 @router.get("/{schedule_id}", response_model=ScheduleResponse)
 def get_schedule(
-    schedule_id: int,
+    schedule_id: str,
     current_user: dict = Depends(get_current_user),
 ):
     """특정 일정 조회"""
@@ -48,7 +48,7 @@ def get_schedule(
         raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다")
 
     # 본인의 일정인지 확인
-    if schedule.user_id != current_user["user_id"]:
+    if schedule["user_id"] != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="권한이 없습니다")
 
     return schedule
@@ -56,7 +56,7 @@ def get_schedule(
 
 @router.put("/{schedule_id}", response_model=ScheduleResponse)
 def update_schedule(
-    schedule_id: int,
+    schedule_id: str,
     schedule_data: ScheduleUpdate,
     current_user: dict = Depends(get_current_user),
 ):
@@ -68,7 +68,7 @@ def update_schedule(
     if not schedule:
         raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다")
 
-    if schedule.user_id != current_user["user_id"]:
+    if schedule["user_id"] != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="권한이 없습니다")
 
     # 수정
@@ -81,7 +81,7 @@ def update_schedule(
 
 @router.delete("/{schedule_id}", status_code=204)
 def delete_schedule(
-    schedule_id: int,
+    schedule_id: str,
     current_user: dict = Depends(get_current_user),
 ):
     """일정 삭제"""
@@ -92,7 +92,7 @@ def delete_schedule(
     if not schedule:
         raise HTTPException(status_code=404, detail="일정을 찾을 수 없습니다")
 
-    if schedule.user_id != current_user["user_id"]:
+    if schedule["user_id"] != current_user["user_id"]:
         raise HTTPException(status_code=403, detail="권한이 없습니다")
 
     # 삭제

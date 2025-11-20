@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.supabase_client import get_supabase
-from app.api.v1.endpoints.users import get_current_user
+from app.core.dependencies import get_current_user
 from app.schemas.match import MatchCodeResponse, MatchConnectRequest, MatchConnectResponse
 
 

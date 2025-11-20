@@ -7,12 +7,7 @@ from typing import Optional, Dict
 from jose import jwt, JWTError
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.config import settings
-
-# HTTP Bearer 토큰 스키마
-security = HTTPBearer()
 
 
 def create_access_token(user_id: str, expires_delta: Optional[timedelta] = None) -> str:
@@ -125,37 +120,3 @@ async def verify_google_token(token: str) -> Dict[str, str]:
 
     except ValueError as e:
         raise ValueError(f"Invalid Google token: {str(e)}")
-
-
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, str]:
-    """
-    FastAPI dependency to get current authenticated user from JWT token
-
-    Args:
-        credentials: HTTP Bearer token from Authorization header
-
-    Returns:
-        Dict containing user info with keys:
-        - user_id: User's unique identifier
-
-    Raises:
-        HTTPException: If token is invalid or expired (401 Unauthorized)
-
-    Usage:
-        @app.get("/protected")
-        def protected_route(current_user: dict = Depends(get_current_user)):
-            user_id = current_user["user_id"]
-            ...
-    """
-    try:
-        token = credentials.credentials
-        user_id = verify_token(token)
-
-        return {"user_id": user_id}
-
-    except JWTError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid authentication credentials: {str(e)}",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
