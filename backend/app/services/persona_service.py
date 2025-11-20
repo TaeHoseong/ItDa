@@ -7,7 +7,6 @@ from app.services.suggest_service import SuggestService
 from app.core.supabase_client import get_supabase
 from app.services.course_service import CourseService
 from app.schemas.course import CoursePreferences
-from sqlalchemy.orm import Session
 
 class PersonaService:
     def __init__(self, sessions: Dict):

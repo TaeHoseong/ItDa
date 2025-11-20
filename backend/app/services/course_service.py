@@ -494,7 +494,7 @@ class CourseService:
 
     # ========== CRUD Methods ==========
 
-    def create_course(self, user_id: str, course_data: dict) -> 'Course':
+    def create_course(self, user_id: str, course_data: dict) -> dict:
         """
         Create a new course in database
 
@@ -503,9 +503,8 @@ class CourseService:
             course_data: Course data from CourseCreate schema
 
         Returns:
-            Created Course object
+            Created course dict
         """
-        from app.models.course import Course
         import uuid
         course_id = str(uuid.uuid4())
         payload = {
@@ -532,7 +531,7 @@ class CourseService:
 
         return response.data[0]
 
-    def get_course(self, course_id: str) -> Optional['Course']:
+    def get_course(self, course_id: str) -> Optional[dict]:
         """
         Get course by ID
 
@@ -555,7 +554,7 @@ class CourseService:
         return response.data[0]
         
 
-    def get_courses_by_user(self, user_id: str) -> List['Course']:
+    def get_courses_by_user(self, user_id: str) -> List[dict]:
         """
         Get all courses by user ID
 
@@ -571,13 +570,11 @@ class CourseService:
             .eq("user_id", user_id)
             .execute()
         )
-        
-        if not response.data:
-            raise RuntimeError("Failed to get course in Supabase")
 
-        return response.data[0]
+        # Empty list is valid, not an error
+        return response.data if response.data else []
     
-    def get_courses_by_couple(self, couple_id: str) -> List['Course']:
+    def get_courses_by_couple(self, couple_id: str) -> List[dict]:
         """
         Get all courses by couple ID
 

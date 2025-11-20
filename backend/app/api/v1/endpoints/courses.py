@@ -2,11 +2,9 @@
 Course management endpoints (Phase 10.4)
 """
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from typing import List
 
 from app.api.v1.endpoints.users import get_current_user
-from app.models.user import User
 from app.schemas.course import CourseCreate, CourseUpdate, CourseResponse
 from app.services.course_service import CourseService
 
@@ -17,7 +15,7 @@ router = APIRouter()
 @router.post("", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
 async def create_course(
     course_data: CourseCreate,
-    current_user: User = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
     """
     Create a new course
@@ -51,7 +49,7 @@ async def create_course(
 @router.get("/{course_id}", response_model=CourseResponse, status_code=status.HTTP_200_OK)
 async def get_course(
     course_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
     """
     Get course by ID
@@ -77,8 +75,8 @@ async def get_course(
         )
 
     # Check access: user must be creator or same couple
-    if course.user_id != current_user.user_id:
-        if not course.couple_id or course.couple_id != current_user.couple_id:
+    if course.user_id != current_user["user_id"]:
+        if not course.couple_id or course.couple_id != current_user.get("couple_id"):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied"
@@ -89,7 +87,7 @@ async def get_course(
 
 @router.get("/", response_model=List[CourseResponse], status_code=status.HTTP_200_OK)
 async def get_my_courses(
-    current_user: User = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
     """
     Get all courses for current user
@@ -111,7 +109,7 @@ async def get_my_courses(
 async def update_course(
     course_id: str,
     course_data: CourseUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
     """
     Update course
@@ -141,7 +139,7 @@ async def update_course(
             )
 
         # Only creator can update
-        if course.user_id != current_user.user_id:
+        if course.user_id != current_user["user_id"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only course creator can update"
@@ -167,7 +165,7 @@ async def update_course(
 @router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_course(
     course_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
     """
     Delete course
@@ -191,7 +189,7 @@ async def delete_course(
         )
 
     # Only creator can delete
-    if course.user_id != current_user.user_id:
+    if course.user_id != current_user["user_id"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only course creator can delete"

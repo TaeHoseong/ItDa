@@ -2,7 +2,6 @@ from typing import List, Optional
 from datetime import datetime
 from fastapi import HTTPException
 
-from app.models.schedule import Schedule
 from app.core.supabase_client import get_supabase
 
 
@@ -42,7 +41,7 @@ class ScheduleService:
 
     # ---------------- CRUD ----------------
 
-    def create(self, user_id: str, data: dict) -> Schedule:
+    def create(self, user_id: str, data: dict) -> dict:
         """일정 생성"""
 
         raw_date = data["date"]
@@ -79,7 +78,7 @@ class ScheduleService:
 
         return rows[0]
 
-    def get_by_user(self, user_id: str) -> List[Schedule]:
+    def get_by_user(self, user_id: str) -> List[dict]:
         """사용자 전체 일정 조회"""
 
         response = (
@@ -95,7 +94,7 @@ class ScheduleService:
         rows = response.data or []
         return rows
 
-    def get_by_id(self, schedule_id: int) -> Optional[Schedule]:
+    def get_by_id(self, schedule_id: int) -> Optional[dict]:
         """특정 일정 조회"""
 
         response = (
@@ -113,7 +112,7 @@ class ScheduleService:
             return None
         return rows[0]
 
-    def get_by_date(self, user_id: str, date: datetime) -> List[Schedule]:
+    def get_by_date(self, user_id: str, date: datetime) -> List[dict]:
         """특정 날짜 일정 조회"""
     
         start = date.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -137,7 +136,7 @@ class ScheduleService:
         rows = response.data or []
         return rows
 
-    def update(self, schedule_id: int, data: dict) -> Schedule:
+    def update(self, schedule_id: int, data: dict) -> dict:
         """일정 수정"""
 
         existing = self.get_by_id(schedule_id)

@@ -1,7 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from typing import List
-from app.core.supabase_client import get_supabase
 from app.core.security import get_current_user
 from app.schemas.schedule import ScheduleCreate, ScheduleUpdate, ScheduleResponse
 from app.services.schedule_service import ScheduleService
@@ -14,7 +12,6 @@ def create_schedule(
     schedule_data: ScheduleCreate,
     current_user: dict = Depends(get_current_user),
 ):
-    supabase = get_supabase()
     """일정 생성 (JWT 인증 필요)"""
     service = ScheduleService()
     user_id = current_user["user_id"]

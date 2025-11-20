@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.supabase_client import get_supabase
 from app.core.security import verify_token
-from app.models.user import User
 from app.schemas.user import UserResponse, SurveyUpdate
 from app.services.user_service import UserService
 from jose import JWTError
@@ -17,7 +16,7 @@ security = HTTPBearer()
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-) -> User:
+) -> dict:
     """
     Extract and verify JWT token from Authorization header
 
@@ -25,7 +24,7 @@ def get_current_user(
         credentials: HTTP Bearer credentials from header
 
     Returns:
-        User object
+        User dict from Supabase
 
     Raises:
         HTTPException 401: If token is invalid or user not found

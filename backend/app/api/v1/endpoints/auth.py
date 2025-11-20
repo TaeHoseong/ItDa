@@ -5,7 +5,6 @@ import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.supabase_client import get_supabase
 from app.core.security import verify_google_token, create_access_token
-from app.models.user import User
 from app.schemas.auth import GoogleLoginRequest, TokenResponse, UserRegisterRequest, UserLoginRequest
 from app.schemas.user import UserCreate, UserResponse
 from app.services.user_service import UserService
