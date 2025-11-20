@@ -50,7 +50,7 @@ class SuggestService:
         if not user.data:
             return None
         
-        data = user.data
+        data = user.data["features"]
 
         if not data.get("survey_done"):
             return None

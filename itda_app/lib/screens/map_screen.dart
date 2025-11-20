@@ -3,7 +3,7 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/map_provider.dart';
-import '../providers/schedule_provider.dart';
+import '../providers/course_provider.dart';
 import '../providers/navigation_provider.dart';
 
 class MapScreen extends StatefulWidget {
@@ -24,21 +24,21 @@ class _MapScreenState extends State<MapScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final scheduleProvider = context.read<ScheduleProvider>();
+      final scheduleProvider = context.read<CourseProvider>();
       scheduleProvider.addListener(_onScheduleChanged);
     });
   }
 
   @override
   void dispose() {
-    final scheduleProvider = context.read<ScheduleProvider>();
+    final scheduleProvider = context.read<CourseProvider>();
     scheduleProvider.removeListener(_onScheduleChanged);
     super.dispose();
   }
 
   void _onScheduleChanged() {
     final mapProvider = context.read<MapProvider>();
-    final scheduleProvider = context.read<ScheduleProvider>();
+    final scheduleProvider = context.read<CourseProvider>();
     _syncMarkersIfNeeded(mapProvider, scheduleProvider);
   }
 
@@ -117,18 +117,25 @@ class _MapScreenState extends State<MapScreen> {
 
   /// 일정 변경 시 마커 동기화
   void _syncMarkersIfNeeded(
-      MapProvider mapProvider, ScheduleProvider scheduleProvider) {
+    MapProvider mapProvider,
+    CourseProvider courseProvider,
+  ) {
     final controller = _mapController;
     if (controller == null || _isSyncing) return;
 
-    // Provider의 마커 동기화
-    final eventsWithPlace = scheduleProvider.getEventsWithPlace();
-    debugPrint('일정 개수 (장소 포함): ${eventsWithPlace.length}');
-    for (final event in eventsWithPlace) {
-      debugPrint('  - ${event.placeName}: lat=${event.latitude}, lng=${event.longitude}');
+    // 모든 데이트 코스 가져오기 (CourseProvider에 이런 헬퍼 하나 추가해 두는 걸 추천)
+    final courses = courseProvider.getAllCourses();
+    debugPrint('데이트 코스 개수: ${courses.length}');
+    for (final course in courses) {
+      for (final slot in course.slots) {
+        debugPrint(
+          '  - [${course.date}] ${slot.placeName}: lat=${slot.latitude}, lng=${slot.longitude}',
+        );
+      }
     }
 
-    mapProvider.syncMarkersWithSchedules(eventsWithPlace);
+    // MapProvider에 있는 마커와 동기화
+    mapProvider.syncMarkersWithSchedules(courses);
 
     final newMarkerIds = mapProvider.markers.map((m) => m.id).toList();
 
@@ -153,6 +160,7 @@ class _MapScreenState extends State<MapScreen> {
       });
     }
   }
+
 
   /// 마커 목록 비교
   bool _isSameMarkerList(List<String> a, List<String> b) {
