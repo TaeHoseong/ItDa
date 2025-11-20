@@ -121,7 +121,7 @@ class CourseProvider extends ChangeNotifier {
   }
 
   Future<void> _loadCoupleCoursesOnce() async {
-    _ensureCouple();
+    // _ensureCouple();
 
     _isLoading = true;
     _error = null;
@@ -234,7 +234,7 @@ class CourseProvider extends ChangeNotifier {
 
   /// 코스 생성 (슬롯 포함 전체)
   Future<DateCourse> createCourse(DateCourse course) async {
-    _ensureCouple();
+    // _ensureCouple();
 
     try {
       final String newId = course.id ?? const Uuid().v4();
@@ -243,6 +243,13 @@ class CourseProvider extends ChangeNotifier {
       final courseJson = course.toJson()
         ..['course_id'] = newId;
 
+      /*
+        여기 손 볼 필요 있어보임 
+        일단 course가 아니라 slots으로 들어가고, user_id도 같이 저장하게 되어있어서 추가해줘야될듯?
+        (일단 지금은 nullable허용해두고 primary key도 해제해 둠) >> 근데 이래도 nullable 에러 떠서 추가가 안 됨.
+        내 브랜치에 있는 코드 기준으로 추가되는거 확인됐어서 이거만 해결하면 정상 작동 될 듯 합니다. 
+        -호성
+      */ 
       final row = {
         'course_id': newId,
         'couple_id': _currentCoupleId,
@@ -297,7 +304,7 @@ class CourseProvider extends ChangeNotifier {
 
   /// 코스 전체 수정 (덮어쓰기)
   Future<DateCourse> updateCourse(DateCourse course) async {
-    _ensureCouple();
+    // _ensureCouple();
 
     if (course.id == null) {
       throw Exception('코스 ID가 없습니다.');
@@ -350,7 +357,7 @@ class CourseProvider extends ChangeNotifier {
 
   /// 코스 삭제
   Future<void> deleteCourse(DateCourse course) async {
-    _ensureCouple();
+    // _ensureCouple();
 
     if (course.id == null) return;
 
