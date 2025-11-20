@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/persona_message.dart';
 import '../models/date_course.dart';
 import '../providers/persona_chat_provider.dart';
-import '../providers/schedule_provider.dart';
+import '../providers/course_provider.dart';
 import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../widgets/date_course_widget.dart';
@@ -574,7 +574,7 @@ class _PlaceRecommendationCards extends StatelessWidget {
     BuildContext context,
     Map<String, dynamic> place,
   ) async {
-    final scheduleProvider = context.read<ScheduleProvider>();
+    final courseProvider = context.read<CourseProvider>();
     DateTime? selectedDate;
     TimeOfDay? selectedTime;
 
@@ -638,25 +638,55 @@ class _PlaceRecommendationCards extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFFF6B6B),
               ),
-              onPressed: () {
+              onPressed: () async {  // 🔸 async 로 변경
                 if (selectedDate != null && selectedTime != null) {
-                  // 일정 추가
-                  scheduleProvider.addEvent(
-                    selectedDate!,
-                    place['name'] ?? '장소',
-                    '${selectedTime!.hour}:${selectedTime!.minute.toString().padLeft(2, '0')}',
-                    placeName: place['name'],
-                    latitude: place['latitude'],
-                    longitude: place['longitude'],
-                    address: place['address'],
+                  // 1) 날짜 문자열로 변환 (YYYY-MM-DD)
+                  final date = selectedDate!;
+                  final dateString =
+                      '${date.year.toString().padLeft(4, '0')}-'
+                      '${date.month.toString().padLeft(2, '0')}-'
+                      '${date.day.toString().padLeft(2, '0')}';
+
+                  // 2) 시간 문자열 (그냥 HH:mm 형식)
+                  final timeLabel =
+                      '${selectedTime!.hour}:${selectedTime!.minute.toString().padLeft(2, '0')}';
+
+                  // 3) 슬롯 하나 생성
+                  final newSlot = CourseSlot(
+                    slotType: 'manual',
+                    emoji: '📍',
+                    startTime: timeLabel,
+                    duration: 60, // 기본 60분 정도로 잡아둠 (원하면 조정)
+                    placeName: place['name'] ?? '장소',
+                    placeAddress: place['address'] as String?,
+                    latitude: (place['latitude'] as num).toDouble(),
+                    longitude: (place['longitude'] as num).toDouble(),
+                    rating: null,
+                    score: (place['score'] as num?)?.toDouble() ?? 0,
+                    distanceFromPrevious: null,
                   );
 
-                  // 지도 화면으로 카메라 이동
+                  // 4) 항상 "새 코스"로 저장 (날짜당 여러 코스도 허용)
+                  final newCourse = DateCourse(
+                    // id 는 백엔드에서 부여하니까 null
+                    date: dateString,
+                    template: 'manual',          // 수동 생성 템플릿 이름
+                    startTime: timeLabel,
+                    endTime: timeLabel,
+                    totalDistance: 0,
+                    totalDuration: newSlot.duration,
+                    slots: [newSlot],
+                  );
+
+                  // 🔸 백엔드 + Provider 에 저장
+                  await courseProvider.createCourse(newCourse);
+
+                  // 5) 지도 화면으로 카메라 이동 (기존 로직 유지)
                   if (place['latitude'] != null && place['longitude'] != null) {
                     final mapProvider = context.read<MapProvider>();
                     mapProvider.moveToPlace(
-                      place['latitude'] as double,
-                      place['longitude'] as double,
+                      (place['latitude'] as num).toDouble(),
+                      (place['longitude'] as num).toDouble(),
                       zoom: 16.0,
                     );
 
@@ -712,7 +742,7 @@ class _DateCourseDisplayState extends State<_DateCourseDisplay> {
         await chatProvider.sendUserMessage(message);
       },
       onAddToSchedule: () async {
-        final scheduleProvider = context.read<ScheduleProvider>();
+        final scheduleProvider = context.read<CourseProvider>();
         final mapProvider = context.read<MapProvider>();
         final navigationProvider = context.read<NavigationProvider>();
 
@@ -721,17 +751,25 @@ class _DateCourseDisplayState extends State<_DateCourseDisplay> {
           final date = DateTime.parse(widget.course.date);
 
           // 각 슬롯을 일정으로 추가
-          for (final slot in widget.course.slots) {
-            await scheduleProvider.createScheduleWithBackend(
-              day: date,
-              title: slot.placeName,
-              time: slot.startTime,
-              placeName: slot.placeName,
-              latitude: slot.latitude,
-              longitude: slot.longitude,
-              address: slot.placeAddress,
-            );
-          }
+          final courseProvider = context.read<CourseProvider>();
+
+          // date 가 DateTime이라면, 백엔드에서 요구하는 포맷에 맞게 문자열로 변환
+          // 예: 'YYYY-MM-DD'
+          final dateString =
+              '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
+          final newCourse = DateCourse(
+            id: null, // 새 코스 생성이니까 null
+            date: dateString,
+            template: widget.course.template,
+            startTime: widget.course.startTime,
+            endTime: widget.course.endTime,
+            totalDistance: widget.course.totalDistance,
+            totalDuration: widget.course.totalDuration,
+            slots: widget.course.slots,
+          );
+
+          await courseProvider.createCourse(newCourse);
 
           // 지도에 코스 경로 표시
           mapProvider.setCourseRoute(widget.course);
