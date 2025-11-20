@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'secrets.dart';
 import 'screens/auth/login_screen.dart';
@@ -16,12 +17,15 @@ import 'providers/map_provider.dart';
 import 'providers/course_provider.dart';
 import 'providers/navigation_provider.dart';
 import 'providers/user_provider.dart';
+import 'providers/chat_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 날짜 포맷 (ko_KR)
   await initializeDateFormatting('ko_KR', null);
 
+  // 네이버 지도 초기화
   await FlutterNaverMap().init(
     clientId: NAVER_MAP_CLIENT_ID,
     onAuthFailed: (ex) {
@@ -38,23 +42,34 @@ void main() async {
     },
   );
 
+  // Supabase 초기화
+  await Supabase.initialize(
+    url: 'https://mzvrpbrwmtmgxtjbdbik.supabase.co',
+    anonKey: SUPABASE_KEY,
+  );
+
   // Hive 초기화
   await Hive.initFlutter();
 
   // Box 열기 (데이터 저장소)
   await Hive.openBox('bookmarks'); // 찜한 장소
-  await Hive.openBox('schedules');
-  await Hive.openBox('user'); // 사용자 정보
+  await Hive.openBox('schedules'); // 필요 없으면 나중에 제거해도 됨
+  await Hive.openBox('user');      // 사용자 정보
 
   runApp(
     MultiProvider(
       providers: [
-        // 1) 코스/캘린더 상태
+        // 1) 유저 정보
+        ChangeNotifierProvider(
+          create: (_) => UserProvider(),
+        ),
+
+        // 2) 코스/캘린더 상태 (Supabase 연동)
         ChangeNotifierProvider(
           create: (_) => CourseProvider(),
         ),
 
-        // 2) PersonaChatProvider ← CourseProvider 주입
+        // 3) PersonaChatProvider ← CourseProvider 주입
         ChangeNotifierProxyProvider<CourseProvider, PersonaChatProvider>(
           create: (context) => PersonaChatProvider.withCourseProvider(
             Provider.of<CourseProvider>(context, listen: false),
@@ -63,15 +78,29 @@ void main() async {
               previous ?? PersonaChatProvider.withCourseProvider(courseProvider),
         ),
 
-        // 3) 지도/네비/유저
+        // 4) 지도/네비
         ChangeNotifierProvider(
           create: (_) => MapProvider(),
         ),
         ChangeNotifierProvider(
           create: (_) => NavigationProvider(),
         ),
-        ChangeNotifierProvider(
-          create: (_) => UserProvider(),
+        ChangeNotifierProxyProvider<UserProvider, ChatProvider>(
+          create: (_) => ChatProvider(Supabase.instance.client),
+          update: (_, userProvider, chatProvider) {
+            chatProvider ??= ChatProvider(Supabase.instance.client);
+
+            final user = userProvider.user;
+            final userId = user?.userId;
+            final coupleId = user?.coupleId;
+
+            chatProvider.configure(
+              userId: userId,
+              coupleId: coupleId,
+            );
+
+            return chatProvider;
+          },
         ),
       ],
       child: const ItdaApp(),
@@ -149,11 +178,22 @@ class _MainScreenState extends State<MainScreen> {
       const ChatScreen(),
     ];
 
-    // 백엔드에서 코스(=일정) 불러오기
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final courseProvider =
-          Provider.of<CourseProvider>(context, listen: false);
-      courseProvider.fetchCoursesFromBackend();
+    // ✅ 로그인 후(MainScreen 진입 후) 커플 기준 Supabase 연동 초기화
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final courseProvider = Provider.of<CourseProvider>(context, listen: false);
+      final userProvider   = Provider.of<UserProvider>(context, listen: false);
+      
+      final coupleId = userProvider.user?.coupleId;
+
+      if (coupleId != null) {
+        try {
+          await courseProvider.initForCouple(coupleId);
+        } catch (e) {
+          debugPrint('initForCouple 실패: $e');
+        }
+      } else {
+        debugPrint('⚠ coupleId가 null 입니다. 로그인 후 UserProvider에 coupleId를 세팅했는지 확인하세요.');
+      }
     });
   }
 
@@ -204,7 +244,7 @@ class _MainScreenState extends State<MainScreen> {
               data: const NavigationBarThemeData(
                 backgroundColor: Colors.white,
                 surfaceTintColor: Colors.transparent,
-                indicatorColor: Colors.transparent,
+                indicatorColor: Colors.transparent, // no pill behind icons
                 elevation: 0,
               ),
               child: NavigationBar(

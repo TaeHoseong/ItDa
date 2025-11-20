@@ -5,6 +5,8 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/course_provider.dart';
+import '../providers/map_provider.dart';
+import '../providers/navigation_provider.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -46,8 +48,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
               ),
               ListTile(
-                leading:
-                    const Icon(Icons.edit_outlined, color: Colors.black87),
+                leading: const Icon(Icons.edit_outlined, color: Colors.black87),
                 title: const Text(
                   '코스 수정',
                   style: TextStyle(
@@ -62,8 +63,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline,
-                    color: Color(0xFFFD9180)),
+                leading: const Icon(
+                  Icons.delete_outline,
+                  color: Color(0xFFFD9180),
+                ),
                 title: const Text(
                   '코스 삭제',
                   style: TextStyle(
@@ -89,8 +92,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final courseProvider = context.watch<CourseProvider>();
     final selectedDay = _selectedDay ?? _focusedDay;
 
-    final selectedCourse = courseProvider.getCourseForDay(selectedDay);
-    final selectedSlots = selectedCourse?.slots ?? [];
+    // ✅ 여러 코스 받을 수 있도록
+    final selectedCourses = courseProvider.getCoursesByDate(selectedDay);
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAF8F5),
@@ -112,7 +115,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 calendarFormat: _calendarFormat,
                 startingDayOfWeek: StartingDayOfWeek.sunday,
 
-                // 🔗 코스 슬롯 연결
+                // 🔗 코스 슬롯 연결 (여러 코스의 슬롯 합쳐서 표시)
                 eventLoader: courseProvider.getSlotsForDay,
 
                 selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
@@ -209,13 +212,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
               ),
 
-              // ===== 코스 / 슬롯 리스트 =====
+              // ===== 코스 리스트 (코스 단위 카드, 각 카드 안에 슬롯들) =====
               Expanded(
                 child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 4),
-                  itemCount: selectedSlots.length + 1,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  itemCount: selectedCourses.length + 1,
                   itemBuilder: (context, index) {
+                    // 맨 위: "새로운 코스 만들기"
                     if (index == 0) {
                       return GestureDetector(
                         onTap: () => _openAddCourseSheet(selectedDay),
@@ -229,21 +233,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          child: Row(
+                          child: const Row(
                             children: [
                               Icon(
-                                selectedCourse == null
-                                    ? Icons.add_rounded
-                                    : Icons.edit_outlined,
+                                Icons.add_rounded,
                                 size: 22,
                                 color: Colors.black87,
                               ),
-                              const SizedBox(width: 8),
+                              SizedBox(width: 8),
                               Text(
-                                selectedCourse == null
-                                    ? '새로운 데이트 코스 만들기'
-                                    : '코스 편집',
-                                style: const TextStyle(
+                                '새로운 데이트 코스 만들기',
+                                style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -254,13 +254,11 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       );
                     }
 
-                    final slot = selectedSlots[index - 1];
+                    final course = selectedCourses[index - 1];
 
                     return GestureDetector(
                       onTap: () {
-                        if (selectedCourse != null) {
-                          _showCourseOptions(selectedDay, selectedCourse);
-                        }
+                        _showCourseOptions(selectedDay, course);
                       },
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 10),
@@ -272,48 +270,140 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           color: const Color(0xFFFFF1F1),
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        child: Row(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              slot.startTime,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '${slot.emoji} ${slot.placeName}',
+                            // 코스 헤더: 시간 범위 + 템플릿 이름 등
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '${course.startTime}  -  ${course.endTime}',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    course.template,
                                     style: const TextStyle(
                                       fontSize: 15,
-                                      fontWeight: FontWeight.w600,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                  if (slot.placeAddress != null &&
-                                      slot.placeAddress!.isNotEmpty)
-                                    Padding(
-                                      padding:
-                                          const EdgeInsets.only(top: 2.0),
-                                      child: Text(
-                                        slot.placeAddress!,
+                                ),
+                                const Icon(
+                                  Icons.more_vert,
+                                  size: 20,
+                                  color: Colors.black45,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+
+                            // 슬롯들 리스트
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: course.slots.map((slot) {
+                                return Padding(
+                                  padding:
+                                      const EdgeInsets.only(bottom: 6.0),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        slot.startTime,
                                         style: const TextStyle(
                                           fontSize: 12,
-                                          color: Colors.black54,
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
-                                    ),
-                                ],
-                              ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '${slot.emoji} ${slot.placeName}',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            if (slot.placeAddress != null &&
+                                                slot.placeAddress!.isNotEmpty)
+                                              Text(
+                                                slot.placeAddress!,
+                                                style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.black54,
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
                             ),
-                            const Icon(
-                              Icons.more_vert,
-                              size: 20,
-                              color: Colors.black45,
+
+                            const SizedBox(height: 8),
+
+                            // ✅ 길 안내 버튼 (지도에 이 코스를 띄우기)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: GestureDetector(
+                                onTap: () {
+                                  final mapProvider =
+                                      context.read<MapProvider>();
+                                  final navProvider =
+                                      context.read<NavigationProvider>();
+
+                                  // 선택한 코스를 지도에 세팅
+                                  mapProvider.setCourseRoute(course);
+
+                                  // 지도 탭으로 이동 (0: 추천, 1: 지도, 2: 달력, 3: 채팅)
+                                  navProvider.setIndex(1);
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(999),
+                                    border: Border.all(
+                                      color: const Color(0xFFFD9180),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.directions_walk,
+                                        size: 16,
+                                        color: Color(0xFFFD9180),
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        '길 안내',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFFFD9180),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -414,8 +504,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     CupertinoButton(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       onPressed: () => Navigator.of(ctx).pop(),
                       child: const Text(
                         '취소',
@@ -423,8 +512,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                       ),
                     ),
                     CupertinoButton(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
                       onPressed: () => Navigator.of(ctx).pop(tempTime),
                       child: const Text(
                         '완료',
@@ -714,8 +802,7 @@ class _TimeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFFF5F5F7),
         borderRadius: BorderRadius.circular(999),

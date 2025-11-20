@@ -3,7 +3,6 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/map_provider.dart';
-import '../providers/course_provider.dart';
 import '../providers/navigation_provider.dart';
 
 class MapScreen extends StatefulWidget {
@@ -20,40 +19,21 @@ class _MapScreenState extends State<MapScreen> {
   bool _isProgrammaticMove = false;
   NPolylineOverlay? _coursePolyline;
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final scheduleProvider = context.read<CourseProvider>();
-      scheduleProvider.addListener(_onScheduleChanged);
-    });
-  }
-
-  @override
-  void dispose() {
-    final scheduleProvider = context.read<CourseProvider>();
-    scheduleProvider.removeListener(_onScheduleChanged);
-    super.dispose();
-  }
-
-  void _onScheduleChanged() {
-    final mapProvider = context.read<MapProvider>();
-    final scheduleProvider = context.read<CourseProvider>();
-    _syncMarkersIfNeeded(mapProvider, scheduleProvider);
-  }
+  // ========= 마커 관련 =========
 
   /// 마커를 지도에 추가
   Future<void> _addMarkersToMap(
-      NaverMapController controller, List<MapMarker> markers) async {
+    NaverMapController controller,
+    List<MapMarker> markers,
+  ) async {
     for (final m in markers) {
       final marker = NMarker(
         id: m.id,
         position: m.position,
-        caption:
-            m.caption != null ? NOverlayCaption(text: m.caption!) : null,
+        caption: m.caption != null ? NOverlayCaption(text: m.caption!) : null,
       );
 
-      // 마커 클릭 이벤트 핸들러
+      // 마커 클릭 이벤트
       marker.setOnTapListener((overlay) {
         _onMarkerTap(m);
       });
@@ -64,19 +44,22 @@ class _MapScreenState extends State<MapScreen> {
 
   /// 마커 클릭 시 호출
   void _onMarkerTap(MapMarker marker) {
-    // 마커 클릭 처리 로직
     debugPrint('마커 클릭: ${marker.id}');
+    // TODO: 필요하면 여기서 bottom sheet 띄우기 등 처리
   }
+
+  // ========= 코스 폴리라인 =========
 
   /// 코스 경로 폴리라인 추가
   Future<void> _addCoursePolyline(
-      NaverMapController controller, List<NLatLng> route) async {
+    NaverMapController controller,
+    List<NLatLng> route,
+  ) async {
     try {
-      // 새 폴리라인 생성
       final polyline = NPolylineOverlay(
         id: 'course_route',
         coords: route,
-        color: const Color(0xFFFF6B9D), // 핑크색
+        color: const Color(0xFFFF6B9D),
         width: 5,
       );
 
@@ -97,6 +80,8 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+  // ========= 카메라 이동 =========
+
   void _moveCameraToTarget(MapProvider mapProvider) {
     final controller = _mapController;
     if (controller == null) return;
@@ -115,54 +100,8 @@ class _MapScreenState extends State<MapScreen> {
     debugPrint('🗺️ 지도 탭 진입 시 카메라 이동 완료');
   }
 
-  /// 일정 변경 시 마커 동기화
-  void _syncMarkersIfNeeded(
-    MapProvider mapProvider,
-    CourseProvider courseProvider,
-  ) {
-    final controller = _mapController;
-    if (controller == null || _isSyncing) return;
+  // ========= 마커 리스트 비교 =========
 
-    // 모든 데이트 코스 가져오기 (CourseProvider에 이런 헬퍼 하나 추가해 두는 걸 추천)
-    final courses = courseProvider.getAllCourses();
-    debugPrint('데이트 코스 개수: ${courses.length}');
-    for (final course in courses) {
-      for (final slot in course.slots) {
-        debugPrint(
-          '  - [${course.date}] ${slot.placeName}: lat=${slot.latitude}, lng=${slot.longitude}',
-        );
-      }
-    }
-
-    // MapProvider에 있는 마커와 동기화
-    mapProvider.syncMarkersWithSchedules(courses);
-
-    final newMarkerIds = mapProvider.markers.map((m) => m.id).toList();
-
-    // 마커 목록이 변경된 경우에만 지도 업데이트
-    if (!_isSameMarkerList(_currentMarkerIds, newMarkerIds)) {
-      _isSyncing = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) async {
-        // 기존 마커 제거
-        await controller.clearOverlays();
-        _coursePolyline = null; // 폴리라인 참조 초기화
-
-        // 새 마커 추가
-        await _addMarkersToMap(controller, mapProvider.markers);
-
-        // 코스 경로가 있으면 폴리라인 추가
-        if (mapProvider.hasCourseRoute) {
-          await _addCoursePolyline(controller, mapProvider.courseRoute!);
-        }
-
-        _currentMarkerIds = newMarkerIds;
-        _isSyncing = false;
-      });
-    }
-  }
-
-
-  /// 마커 목록 비교
   bool _isSameMarkerList(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
     for (int i = 0; i < a.length; i++) {
@@ -171,46 +110,57 @@ class _MapScreenState extends State<MapScreen> {
     return true;
   }
 
+  // ========= build =========
+
   @override
   Widget build(BuildContext context) {
     final padding = MediaQuery.of(context).padding;
-    final size = MediaQuery.of(context).size;
     final mapProvider = context.watch<MapProvider>();
     final navigationProvider = context.watch<NavigationProvider>();
 
-    // 지도 탭으로 이동했을 때 pending된 작업 실행
-    if (navigationProvider.currentIndex == 1) {
+    // 🔁 지도 탭에 있을 때만 동기화/카메라 이동
+    if (navigationProvider.currentIndex == 1 && _mapController != null) {
+      // 1) 카메라 이동 예약 처리
       if (mapProvider.hasPendingMove) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _moveCameraToTarget(mapProvider);
         });
       }
 
-      // 코스 경로가 새로 생성되었으면 마커 + 폴리라인 그리기
-      if (mapProvider.hasCourseRoute && _mapController != null) {
-        final newMarkerIds = mapProvider.markers.map((m) => m.id).toList();
+      // 2) 선택된 코스 상태에 맞춰 마커/폴리라인 동기화
+      final newMarkerIds = mapProvider.markers.map((m) => m.id).toList();
 
-        // 코스 마커가 아직 지도에 없으면 추가
-        if (!_isSameMarkerList(_currentMarkerIds, newMarkerIds)) {
-          WidgetsBinding.instance.addPostFrameCallback((_) async {
-            if (!_isSyncing) {
-              _isSyncing = true;
+      final shouldRedrawOverlays =
+          !_isSameMarkerList(_currentMarkerIds, newMarkerIds) ||
+          (mapProvider.hasCourseRoute && _coursePolyline == null) ||
+          (!mapProvider.hasCourseRoute && _coursePolyline != null);
 
-              // 기존 오버레이 모두 제거
-              await _mapController!.clearOverlays();
-              _coursePolyline = null; // 폴리라인 참조 초기화
+      if (shouldRedrawOverlays && !_isSyncing) {
+        _isSyncing = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          final controller = _mapController;
+          if (controller == null) {
+            _isSyncing = false;
+            return;
+          }
 
-              // 모든 마커 추가 (일정 마커 + 코스 마커)
-              await _addMarkersToMap(_mapController!, mapProvider.markers);
+          // 기존 오버레이 모두 제거
+          await controller.clearOverlays();
+          _coursePolyline = null;
 
-              // 폴리라인 추가
-              await _addCoursePolyline(_mapController!, mapProvider.courseRoute!);
+          // ✅ MapProvider.markers만 다시 그림
+          if (mapProvider.markers.isNotEmpty) {
+            await _addMarkersToMap(controller, mapProvider.markers);
+          }
 
-              _currentMarkerIds = newMarkerIds;
-              _isSyncing = false;
-            }
-          });
-        }
+          // ✅ 선택된 코스가 있을 때만 폴리라인 그림
+          if (mapProvider.hasCourseRoute && mapProvider.courseRoute != null) {
+            await _addCoursePolyline(controller, mapProvider.courseRoute!);
+          }
+
+          _currentMarkerIds = newMarkerIds;
+          _isSyncing = false;
+        });
       }
     }
 
@@ -218,7 +168,7 @@ class _MapScreenState extends State<MapScreen> {
       backgroundColor: const Color(0xFFF5F5F5),
       body: Stack(
         children: [
-          // ================= NAVER MAP (배경) =================
+          // ================= NAVER MAP =================
           NaverMap(
             options: NaverMapViewOptions(
               initialCameraPosition: NCameraPosition(
@@ -229,38 +179,42 @@ class _MapScreenState extends State<MapScreen> {
             onMapReady: (controller) async {
               _mapController = controller;
 
-              // Provider 초기화 (딱 1회만 동작)
+              // Provider 초기화 (서울시청 마커 등)
               mapProvider.ensureInitialized();
 
-              // Provider에 저장된 마커들을 지도에 추가
-              await _addMarkersToMap(controller, mapProvider.markers);
-              _currentMarkerIds = mapProvider.markers.map((m) => m.id).toList();
-            },
+              // 초기 진입 시 상태대로 마커/폴리라인 그리기
+              if (mapProvider.markers.isNotEmpty) {
+                await _addMarkersToMap(controller, mapProvider.markers);
+                _currentMarkerIds =
+                    mapProvider.markers.map((m) => m.id).toList();
+              }
 
-            // 📌 flutter_naver_map 공식 방식: 카메라 이벤트는 위젯 콜백으로 받는다.
+              if (mapProvider.hasCourseRoute &&
+                  mapProvider.courseRoute != null) {
+                await _addCoursePolyline(controller, mapProvider.courseRoute!);
+              }
+            },
             onCameraIdle: () {
               final c = _mapController;
               if (c == null) return;
 
-              // 프로그래밍 방식의 이동이면 플래그만 리셋하고 리턴
               if (_isProgrammaticMove) {
                 _isProgrammaticMove = false;
                 return;
               }
 
-              // 사용자가 직접 이동한 경우만 Provider 상태 업데이트
               final pos = c.nowCameraPosition;
               mapProvider.updateCamera(pos);
             },
           ),
 
-          // ================= 오버레이 UI =================
+          // ================= 상단 UI 오버레이 =================
           Positioned.fill(
             child: Column(
               children: [
                 SizedBox(height: padding.top + 16),
 
-                // -------- 상단 검색바 + 모드 버튼 --------
+                // -------- 검색바 + 모드 버튼 --------
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
@@ -293,8 +247,7 @@ class _MapScreenState extends State<MapScreen> {
                                 '장소, 주소 검색',
                                 style: TextStyle(
                                   fontSize: 16,
-                                  color:
-                                      Color.fromRGBO(60, 60, 67, 0.6),
+                                  color: Color.fromRGBO(60, 60, 67, 0.6),
                                 ),
                               ),
                             ],
@@ -302,7 +255,7 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // 다크/라이트 전환 아이콘 (추후 Provider에 연결 가능)
+                      // 라이트/다크 토글 아이콘 (현재는 모양만)
                       Container(
                         width: 40,
                         height: 40,
@@ -329,16 +282,27 @@ class _MapScreenState extends State<MapScreen> {
 
                 const SizedBox(height: 10),
 
-                // -------- 상단 아이콘/칩 (즐겨찾기, 현위치, 점수) --------
-                const Padding(
-                  padding: EdgeInsets.only(left: 24),
+                // -------- 상단 아이콘/칩 + X 버튼 --------
+                Padding(
+                  padding: const EdgeInsets.only(left: 24, right: 24),
                   child: Row(
                     children: [
-                      _CircleChip(icon: Icons.star_border),
-                      SizedBox(width: 8),
-                      _CircleChip(icon: Icons.navigation),
-                      SizedBox(width: 8),
-                      _ScoreChip(scoreText: '10.1'),
+                      const _CircleChip(icon: Icons.star_border),
+                      const SizedBox(width: 8),
+                      const _CircleChip(icon: Icons.navigation),
+                      const SizedBox(width: 8),
+                      const _ScoreChip(scoreText: '10.1'),
+                      const Spacer(),
+                      // ✅ 코스가 있을 때만 X 버튼 노출
+                      if (mapProvider.hasCourseRoute)
+                        _CircleChip(
+                          icon: Icons.close,
+                          onTap: () {
+                            // 코스 숨기기
+                            mapProvider.clearCourseRoute();
+                            // 폴리라인은 mapProvider 변경 → MapScreen에서 싱크하면서 지움
+                          },
+                        ),
                     ],
                   ),
                 ),
@@ -355,17 +319,19 @@ class _MapScreenState extends State<MapScreen> {
 
 class _CircleChip extends StatelessWidget {
   final IconData icon;
-  const _CircleChip({required this.icon});
+  final VoidCallback? onTap;
+
+  const _CircleChip({required this.icon, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final child = Container(
       width: 32,
       height: 32,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: Colors.white,
         shape: BoxShape.circle,
-        boxShadow: const [
+        boxShadow: [
           BoxShadow(
             color: Color.fromRGBO(34, 10, 0, 0.2),
             blurRadius: 4,
@@ -378,6 +344,13 @@ class _CircleChip extends StatelessWidget {
         size: 18,
         color: Colors.grey.shade700,
       ),
+    );
+
+    if (onTap == null) return child;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: child,
     );
   }
 }

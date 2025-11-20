@@ -47,4 +47,82 @@ class UserApiService {
 
     // Success - survey saved to database
   }
+
+  /// 매칭 코드 생성: POST /match/generate-code
+  /// 성공 시 서버에서 내려준 JSON(Map)을 그대로 반환
+  static Future<Map<String, dynamic>> generateMatchCode() async {
+    final token = await _storage.read(key: _kAccessToken);
+
+    if (token == null) {
+      throw Exception('로그인이 필요합니다. 토큰이 없습니다.');
+    }
+
+    final uri = Uri.parse('${ApiConfig.baseUrl}/match/generate-code');
+
+    final response = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
+
+    Map<String, dynamic>? body;
+    try {
+      body = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      body = null;
+    }
+
+    if (response.statusCode != 201) {
+      final detail = body?['detail']?.toString() ?? response.body;
+      throw Exception('매칭 코드 생성 실패 (${response.statusCode}): $detail');
+    }
+
+    if (body == null) {
+      throw Exception('매칭 코드 생성 실패: 빈 응답');
+    }
+
+    return body;
+  }
+
+  /// 매칭 코드로 커플 연결: POST /match/connect
+  /// 성공 시 서버 JSON(Map) 그대로 반환
+  static Future<Map<String, dynamic>> connectWithMatchCode(
+      String matchCode) async {
+    final token = await _storage.read(key: _kAccessToken);
+
+    if (token == null) {
+      throw Exception('로그인이 필요합니다. 토큰이 없습니다.');
+    }
+
+    final uri = Uri.parse('${ApiConfig.baseUrl}/match/connect');
+
+    final response = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'match_code': matchCode}),
+    );
+
+    Map<String, dynamic>? body;
+    try {
+      body = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {
+      body = null;
+    }
+
+    if (response.statusCode != 201) {
+      final detail = body?['detail']?.toString() ?? response.body;
+      throw Exception('커플 매칭 실패 (${response.statusCode}): $detail');
+    }
+
+    if (body == null) {
+      throw Exception('커플 매칭 실패: 빈 응답');
+    }
+
+    return body;
+  }
 }

@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/chat_provider.dart';
+import '../providers/user_provider.dart';
 import '../models/chat_message.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -9,240 +13,229 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final TextEditingController _messageController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
-  final List<ChatMessage> _messages = [
-    ChatMessage(
-      text: '오늘 저녁 뭐 먹을까?',
-      isMine: false,
-      timestamp: DateTime.now().subtract(const Duration(minutes: 30)),
-    ),
-    ChatMessage(
-      text: '파스타 어때? 연남동에 새로 생긴 곳 가보자!',
-      isMine: true,
-      timestamp: DateTime.now().subtract(const Duration(minutes: 28)),
-    ),
-    ChatMessage(
-      text: '좋아! 그럼 영화 보고 갈까?',
-      isMine: false,
-      timestamp: DateTime.now().subtract(const Duration(minutes: 25)),
-    ),
-    ChatMessage(
-      text: '완벽해 ❤️',
-      isMine: true,
-      timestamp: DateTime.now().subtract(const Duration(minutes: 24)),
-    ),
-  ];
+  final _textController = TextEditingController();
+  final _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   @override
   void dispose() {
-    _messageController.dispose();
+    _textController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
 
-  void _sendMessage() {
-    if (_messageController.text.trim().isEmpty) return;
+  void _send(ChatProvider chat) async {
+    final text = _textController.text;
+    if (text.trim().isEmpty) return;
 
-    setState(() {
-      _messages.add(ChatMessage(
-        text: _messageController.text,
-        isMine: true,
-        timestamp: DateTime.now(),
-      ));
-    });
+    await chat.send(text);
+    _textController.clear();
 
-    _messageController.clear();
-
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+    await Future.delayed(const Duration(milliseconds: 80));
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    const mainColor = Color(0xFFFD9180);
+
     return Scaffold(
+      backgroundColor: const Color(0xFFFAF8F5),
       appBar: AppBar(
-        title: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: const Color(0xFFEDEDED),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.favorite,
-                color: Color(0xFFFD9180),
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '내 연인',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  '온라인',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.green,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
         backgroundColor: Colors.white,
-        elevation: 1,
+        foregroundColor: Colors.black87,
+        elevation: 0.5,
+        title: const Text(
+          '커플 채팅',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                return _buildMessageBubble(message);
-              },
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.auto_awesome),
-                  color: const Color(0xFFFD9180),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('AI 추천 기능은 곧 추가될 예정입니다!'),
-                        duration: Duration(seconds: 2),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // ===== 메시지 리스트 =====
+            Expanded(
+              child: Consumer<ChatProvider>(
+                builder: (context, chat, _) {
+                  if (chat.coupleId == null) {
+                    return Center(
+                      child: Text(
+                        '아직 커플 매칭이 되지 않았어요 🥲',
+                        style: TextStyle(color: Colors.grey[500]),
                       ),
                     );
-                  },
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    decoration: InputDecoration(
-                      hintText: '메시지를 입력하세요...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(25),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: const Color(0xFFF5F5F5),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
-                      ),
-                    ),
-                    maxLines: null,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _sendMessage(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFD9180),
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.send),
-                    color: Colors.white,
-                    onPressed: _sendMessage,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+                  }
 
-  Widget _buildMessageBubble(ChatMessage message) {
-    return Align(
-      alignment: message.isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.7,
-        ),
-        decoration: BoxDecoration(
-          color: message.isMine
-              ? const Color(0xFFFD9180)
-              : Colors.grey[200],
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              message.text,
-              style: TextStyle(
-                color: message.isMine ? Colors.white : Colors.black87,
-                fontSize: 15,
+                  if (chat.isLoading && chat.messages.isEmpty) {
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
+                  }
+
+                  if (chat.error != null && chat.messages.isEmpty) {
+                    return Center(
+                      child: Text(
+                        chat.error!,
+                        style: const TextStyle(color: Colors.redAccent),
+                      ),
+                    );
+                  }
+
+                  final msgs = chat.messages;
+
+                  if (msgs.isEmpty) {
+                    return Center(
+                      child: Text(
+                        '처음 메시지를 보내보세요 💬',
+                        style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 13,
+                        ),
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    controller: _scrollController,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    itemCount: msgs.length,
+                    itemBuilder: (context, index) {
+                      final msg = msgs[index];
+                      final isMine = chat.isMine(msg);
+                      return _ChatBubble(
+                        message: msg,
+                        isMine: isMine,
+                      );
+                    },
+                  );
+                },
               ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              _formatTime(message.timestamp),
-              style: TextStyle(
-                color: message.isMine
-                    ? Colors.white.withOpacity(0.7)
-                    : Colors.grey[600],
-                fontSize: 11,
-              ),
+
+            // ===== 입력창 =====
+            Consumer<ChatProvider>(
+              builder: (_, chat, __) {
+                final canChat = chat.coupleId != null;
+
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 4,
+                        offset: Offset(0, -1),
+                      ),
+                    ],
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _textController,
+                            enabled: canChat,
+                            minLines: 1,
+                            maxLines: 4,
+                            decoration: InputDecoration(
+                              hintText: canChat
+                                  ? '메시지를 입력하세요'
+                                  : '커플 매칭 후 채팅을 사용할 수 있어요',
+                              filled: true,
+                              fillColor: const Color(0xFFF5F3F0),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(20),
+                                borderSide: BorderSide.none,
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: (!canChat || chat.isSending)
+                              ? null
+                              : () => _send(chat),
+                          icon: chat.isSending
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.send_rounded),
+                          color: mainColor,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),
       ),
     );
   }
+}
 
-  String _formatTime(DateTime time) {
-    final now = DateTime.now();
-    final difference = now.difference(time);
+class _ChatBubble extends StatelessWidget {
+  final ChatMessage message;
+  final bool isMine;
 
-    if (difference.inMinutes < 1) {
-      return '방금';
-    } else if (difference.inHours < 1) {
-      return '${difference.inMinutes}분 전';
-    } else if (difference.inDays < 1) {
-      return '${time.hour}:${time.minute.toString().padLeft(2, '0')}';
-    } else {
-      return '${time.month}/${time.day} ${time.hour}:${time.minute.toString().padLeft(2, '0')}';
-    }
+  const _ChatBubble({
+    required this.message,
+    required this.isMine,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final align =
+        isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final color = isMine ? const Color(0xFFFD9180) : Colors.white;
+    final textColor = isMine ? Colors.white : Colors.black87;
+
+    return Column(
+      crossAxisAlignment: align,
+      children: [
+        Container(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.7,
+          ),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(16).copyWith(
+              bottomLeft: isMine ? const Radius.circular(16) : Radius.zero,
+              bottomRight: isMine ? Radius.zero : const Radius.circular(16),
+            ),
+          ),
+          child: Text(
+            message.content,
+            style: TextStyle(color: textColor, fontSize: 14),
+          ),
+        ),
+      ],
+    );
   }
 }
