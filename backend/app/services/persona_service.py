@@ -360,7 +360,7 @@ class PersonaService:
         # pending_data 초기화 (일정 조회는 독립적인 액션)
         session["pending_data"] = {}
 
-        if not self.supabse:
+        if not self.supabase:
             return {
                 "action_taken": "error",
                 "message": "데이터베이스 연결이 필요합니다."
@@ -382,8 +382,8 @@ class PersonaService:
         print(f"   Current datetime: {datetime.now()}")
         print(f"{'='*60}\n")
 
-        # ScheduleService 인스턴스 생성 (DB session 전달)
-        schedule_service = ScheduleService(self.supabase)
+        # ScheduleService 인스턴스 생성
+        schedule_service = ScheduleService()
 
         # 시간 범위 계산
         now = datetime.now()
@@ -411,30 +411,41 @@ class PersonaService:
 
         # 일정 포맷팅
         formatted_message = None
-        if schedules:
-            schedule_lines = []
-            for idx, schedule in enumerate(schedules, 1):
-                date_str = schedule.date.strftime("%Y-%m-%d (%A)")
-                time_str = schedule.time if schedule.time else "시간 미정"
-                place_str = f" @ {schedule.place_name}" if schedule.place_name else ""
+        formatted_message = ""
+        if len(schedules) == 0:
+            # TODO: 일정이 없을 경우 "일정을 알려드릴게요!"하는 에러 처리용. 임시이므로 좀 더 개선 필요 (홍재형) 
+            formatted_message = f"{timeframe}에는 아직 일정이 없어요!"
+        else:
+            for i, schedule in enumerate(schedules, 1):
+                schedule_lines = []
+                date_str = datetime.fromisoformat(schedule["date"]).strftime("%Y-%m-%d (%A)")
+                slots = schedule['slots']
+                
+                for idx, slot in enumerate(slots, 1):
+                    time_str = slot['start_time'] if slot['start_time'] else "시간 미정"
+                    duration = slot['duration'] if slot['duration'] else ""
 
-                schedule_lines.append(
-                    f"{idx}. [{date_str} {time_str}] {schedule.title}{place_str}"
-                )
+                    place_str = f" @ {slot['place_name']}" if ['place_name'] else ""
 
-            formatted_message = "\n".join(schedule_lines)
+                    schedule_lines.append(
+                        f"-{idx}. [{date_str} {time_str} for {duration}min.]{place_str}"
+                    )
+                
+                formatted_message += "\n"+ f"{i}번째 일정:\n" + "\n".join(schedule_lines)
 
         # 응답 데이터 준비
         schedules_data = [
             {
-                "id": s.id,
-                "title": s.title,
-                "date": s.date.isoformat(),
-                "time": s.time,
-                "place_name": s.place_name,
-                "latitude": s.latitude,
-                "longitude": s.longitude,
-                "address": s.address
+                "id": s['id'],
+                "course_id": s['course_id'],
+                "couple_id": s["couple_id"],
+                # "title": s['title'],
+                "date": s["date"].isoformat() if isinstance(s["date"], datetime) else s["date"],
+                "time": s['start_time'],
+                "slots": s['slots'],
+                # "latitude": s.latitude,
+                # "longitude": s.longitude,
+                # "address": s.address
             }
             for s in schedules
         ]
