@@ -109,8 +109,9 @@ async def get_my_courses(
     Returns:
         List of courses
     """
+
     course_service = CourseService(db)
-    courses = course_service.get_courses_by_user(db, current_user.user_id)
+    courses = course_service.get_courses_by_user(db, current_user["user_id"])
 
     return [CourseResponse.from_orm(course) for course in courses]
 

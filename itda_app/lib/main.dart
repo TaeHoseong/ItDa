@@ -4,10 +4,8 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
-
 import 'secrets.dart';
 import 'screens/auth/login_screen.dart';
-import 'screens/home_screen.dart';
 import 'screens/map_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/persona_screen.dart';
@@ -15,9 +13,9 @@ import 'screens/calendar_screen.dart';
 
 import 'providers/persona_chat_provider.dart';
 import 'providers/map_provider.dart';
-import 'providers/schedule_provider.dart';
+import 'providers/course_provider.dart';
 import 'providers/navigation_provider.dart';
-
+import 'providers/user_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,19 +23,20 @@ void main() async {
   await initializeDateFormatting('ko_KR', null);
 
   await FlutterNaverMap().init(
-          clientId: NAVER_MAP_CLIENT_ID,
-          onAuthFailed: (ex) {
-            switch (ex) {
-              case NQuotaExceededException(:final message):
-                print("사용량 초과 (message: $message)");
-                break;
-              case NUnauthorizedClientException() ||
+    clientId: NAVER_MAP_CLIENT_ID,
+    onAuthFailed: (ex) {
+      switch (ex) {
+        case NQuotaExceededException(:final message):
+          print("사용량 초과 (message: $message)");
+          break;
+        case NUnauthorizedClientException() ||
               NClientUnspecifiedException() ||
               NAnotherAuthFailedException():
-                print("인증 실패: $ex");
-                break;
-            }
-          });
+          print("인증 실패: $ex");
+          break;
+      }
+    },
+  );
 
   // Hive 초기화
   await Hive.initFlutter();
@@ -45,31 +44,35 @@ void main() async {
   // Box 열기 (데이터 저장소)
   await Hive.openBox('bookmarks'); // 찜한 장소
   await Hive.openBox('schedules');
-  await Hive.openBox('user');       // 사용자 정보
+  await Hive.openBox('user'); // 사용자 정보
 
   runApp(
     MultiProvider(
       providers: [
+        // 1) 코스/캘린더 상태
         ChangeNotifierProvider(
-          create: (_) => PersonaChatProvider(),
+          create: (_) => CourseProvider(),
         ),
-        ChangeNotifierProvider(
-          create: (_) => ScheduleProvider(),
-        ),
-        ChangeNotifierProxyProvider<ScheduleProvider, PersonaChatProvider>(
-          create: (context) => PersonaChatProvider.withScheduleProvider(
-            Provider.of<ScheduleProvider>(context, listen: false),
+
+        // 2) PersonaChatProvider ← CourseProvider 주입
+        ChangeNotifierProxyProvider<CourseProvider, PersonaChatProvider>(
+          create: (context) => PersonaChatProvider.withCourseProvider(
+            Provider.of<CourseProvider>(context, listen: false),
           ),
-          update: (context, scheduleProvider, previous) =>
-              previous ?? PersonaChatProvider.withScheduleProvider(scheduleProvider),
+          update: (context, courseProvider, previous) =>
+              previous ?? PersonaChatProvider.withCourseProvider(courseProvider),
         ),
+
+        // 3) 지도/네비/유저
         ChangeNotifierProvider(
           create: (_) => MapProvider(),
         ),
         ChangeNotifierProvider(
           create: (_) => NavigationProvider(),
         ),
-        // 다른 Provider 있으면 여기에 추가
+        ChangeNotifierProvider(
+          create: (_) => UserProvider(),
+        ),
       ],
       child: const ItdaApp(),
     ),
@@ -92,13 +95,13 @@ class ItdaApp extends StatelessWidget {
         ),
         scaffoldBackgroundColor: const Color(0xFFFAF8F5),
 
-        // Optional: tune NavigationBar look & feel
+        // NavigationBar 스타일
         navigationBarTheme: NavigationBarThemeData(
           elevation: 3,
           height: 72,
           indicatorShape: const StadiumBorder(),
           backgroundColor: Colors.white,
-          indicatorColor: const Color(0x1AFF69B4), // subtle pink indicator
+          indicatorColor: const Color(0x1AFF69B4),
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             final isSelected = states.contains(WidgetState.selected);
             return TextStyle(
@@ -146,10 +149,11 @@ class _MainScreenState extends State<MainScreen> {
       const ChatScreen(),
     ];
 
-    // 백엔드에서 일정 불러오기
+    // 백엔드에서 코스(=일정) 불러오기
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final scheduleProvider = Provider.of<ScheduleProvider>(context, listen: false);
-      scheduleProvider.fetchSchedulesFromBackend();
+      final courseProvider =
+          Provider.of<CourseProvider>(context, listen: false);
+      courseProvider.fetchCoursesFromBackend();
     });
   }
 
@@ -174,7 +178,6 @@ class _MainScreenState extends State<MainScreen> {
         children: _pages,
       ),
       bottomNavigationBar: Container(
-        // Background behind the bar (same as page background)
         color: const Color(0xFFFAF8F5),
         child: Container(
           decoration: const BoxDecoration(
@@ -185,7 +188,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
             boxShadow: [
               BoxShadow(
-                color: Color(0x22000000), // soft shadow
+                color: Color(0x22000000),
                 blurRadius: 20,
                 offset: Offset(0, 0),
                 spreadRadius: 2,
@@ -201,15 +204,17 @@ class _MainScreenState extends State<MainScreen> {
               data: const NavigationBarThemeData(
                 backgroundColor: Colors.white,
                 surfaceTintColor: Colors.transparent,
-                indicatorColor: Colors.transparent, // no pill behind icons
+                indicatorColor: Colors.transparent,
                 elevation: 0,
               ),
               child: NavigationBar(
                 height: 72,
                 selectedIndex: navigationProvider.currentIndex,
-                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                labelBehavior:
+                    NavigationDestinationLabelBehavior.alwaysShow,
                 onDestinationSelected: (index) {
-                  if (navigationProvider.currentIndex == index && index == 0) {
+                  if (navigationProvider.currentIndex == index &&
+                      index == 0) {
                     _nextPersonaSentence();
                   }
                   navigationProvider.setIndex(index);
@@ -240,7 +245,7 @@ class _MainScreenState extends State<MainScreen> {
             ),
           ),
         ),
-      )
+      ),
     );
   }
 }

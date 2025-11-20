@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
-import './schedule_provider.dart';
 import '../models/date_course.dart';
 
 class MapMarker {
@@ -65,18 +64,37 @@ class MapProvider extends ChangeNotifier {
   }
 
   /// ScheduleProvider의 일정들로 마커 생성
-  void syncMarkersWithSchedules(List<Schedule> schedules) {
+  void syncMarkersWithSchedules(List<DateCourse> courses) {
     // 기존 마커 제거 (초기화용 마커 제외)
     _markers.removeWhere((m) => m.id != 'city_hall');
 
-    // 장소 정보가 있는 일정만 마커 추가
-    for (final schedule in schedules) {
-      if (schedule.hasPlace) {
+    for (final course in courses) {
+      // DateCourse.date 는 String이므로, 가능하면 DateTime으로 파싱
+      DateTime? courseDate;
+      try {
+        courseDate = DateTime.parse(course.date);
+      } catch (_) {
+        // 파싱 실패하면 그냥 null로 두고, 아래에서 문자열 사용
+      }
+      final dateKey = courseDate?.millisecondsSinceEpoch.toString() ?? course.date;
+
+      // 코스 안의 슬롯들 중 위치가 있는 슬롯만 마커로 추가
+      for (int i = 0; i < course.slots.length; i++) {
+        final slot = course.slots[i];
+
+        // lat/lng는 DateCourse가 아니라 CourseSlot에 있음
+        final lat = slot.latitude;
+        final lng = slot.longitude;
+
+        // 혹시 0,0 같은 더미 좌표를 걸러내고 싶으면 여기서 체크
+        // if (lat == 0 && lng == 0) continue;
+
         _markers.add(
           MapMarker(
-            id: 'schedule_${schedule.date.millisecondsSinceEpoch}_${schedule.time}',
-            position: NLatLng(schedule.latitude!, schedule.longitude!),
-            caption: schedule.placeName,
+            id: 'course_${dateKey}_slot_$i',
+            position: NLatLng(lat, lng),
+            // 이모지 + 장소 이름 같이 보여주면 가독성 좋음
+            caption: '${slot.emoji} ${slot.placeName}',
           ),
         );
       }
@@ -88,6 +106,7 @@ class MapProvider extends ChangeNotifier {
       print('MapProvider: 마커 동기화 완료 (${_markers.length}개 마커)');
     }
   }
+
 
   /// 특정 장소로 카메라 이동 (지도 탭 진입 시 실제 이동)
   void moveToPlace(double latitude, double longitude, {double zoom = 15.0}) {
@@ -123,7 +142,7 @@ class MapProvider extends ChangeNotifier {
       final slot = course.slots[i];
       _markers.add(
         MapMarker(
-          id: 'course_${i}',
+          id: 'course_$i',
           position: NLatLng(slot.latitude, slot.longitude),
           caption: '${i + 1}. ${slot.placeName}',
         ),

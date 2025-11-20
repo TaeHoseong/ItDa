@@ -93,7 +93,7 @@ async def get_current_user_info(
 @router.put("/survey", response_model=UserResponse, status_code=status.HTTP_200_OK)
 async def submit_survey(
     survey_data: SurveyUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user = Depends(get_current_user),
 ):
     """
     Submit or re-submit user survey (updates persona)
@@ -112,12 +112,11 @@ async def submit_survey(
         HTTPException 404: If user not found
         HTTPException 500: If database operation fails
     """
-    supabase = get_supabase()
     try:
         user_service = UserService()
 
         # Update persona using service layer
-        updated_user = user_service.update_persona(current_user.user_id, survey_data)
+        updated_user = user_service.update_persona(current_user["user_id"], survey_data)
 
         if not updated_user:
             raise HTTPException(
@@ -126,15 +125,15 @@ async def submit_survey(
             )
 
         return UserResponse(
-            user_id=updated_user.user_id,
-            email=updated_user.email,
-            name=updated_user.name,
-            picture=updated_user.picture,
-            nickname=updated_user.nickname,
-            birthday=updated_user.birthday,
-            gender=updated_user.gender,
-            couple_id=updated_user.couple_id,
-            survey_done=updated_user.survey_done
+            user_id=updated_user["user_id"],
+            email=updated_user["email"],
+            name=updated_user.get("name"),
+            picture=updated_user.get("picture"),
+            nickname=updated_user.get("nickname"),
+            birthday=updated_user.get("birthday"),
+            gender=updated_user.get("gender"),
+            couple_id=updated_user.get("couple_id"),
+            survey_done=updated_user.get("survey_done", False)
         )
 
     except HTTPException:

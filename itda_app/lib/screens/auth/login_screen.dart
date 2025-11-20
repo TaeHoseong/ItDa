@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:itda_app/main.dart';
 import 'signup_screen.dart';
-import '../survey_screen.dart';
 import '../../services/api_config.dart';
+import 'package:itda_app/services/auth_flow_helper.dart';
+import 'package:provider/provider.dart';
+import 'package:itda_app/providers/user_provider.dart';
+import 'package:itda_app/models/app_user.dart';
 
 // ▼ 추가: 구글/HTTP/보안 저장소
 import 'package:google_sign_in/google_sign_in.dart';
@@ -50,7 +52,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _googleLoading = false;
   final _google = GoogleSignIn(
     scopes: ['email', 'profile'],
-    serverClientId: '545845229063-okupe6in5bos5lkb9n4apc18t62hpqj1.apps.googleusercontent.com',
+    serverClientId:
+        '545845229063-okupe6in5bos5lkb9n4apc18t62hpqj1.apps.googleusercontent.com',
   );
   final _session = _SessionStore();
 
@@ -61,21 +64,66 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _login() {
-    if (_emailController.text.isNotEmpty &&
-        _passwordController.text.isNotEmpty) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const SurveyScreen()),
-      );
-    } else {
+  Future<AppUser> _performLoginRequest({
+    required String email,
+    required String password,
+  }) async {
+    final resp = await http.post(
+      Uri.parse('${ApiConfig.baseUrl}/auth/login'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'password': password}),
+    );
+
+    if (resp.statusCode != 200) {
+      throw Exception('로그인 실패: ${resp.body}');
+    }
+
+    final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
+
+    // Save access token to secure storage
+    final accessToken = decoded['access_token'] as String;
+    final userJson = decoded['user'] as Map<String, dynamic>;
+    final userId = userJson['user_id'] as String?;
+
+    await _session.save(accessToken, null, userId);
+
+    // Extract user from TokenResponse
+    return AppUser.fromJson(userJson);
+  }
+
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('이메일과 비밀번호를 입력해주세요')),
+      );
+      return;
+    }
+
+    try {
+      final user = await _performLoginRequest(
+        email: email,
+        password: password,
+      );
+      if (!mounted) return;
+
+      context.read<UserProvider>().setUser(user);
+
+      PostAuthNavigator.routeWithUser(
+        context,
+        user: user,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('로그인 실패: $error')),
       );
     }
   }
 
-  // ▼ 추가: Route A – Google Sign-In → idToken 서버 전송 → 세션 저장 → 메인 이동
+  // ▼ Route A – Google Sign-In
   Future<void> _handleGoogleSignIn() async {
     setState(() => _googleLoading = true);
     try {
@@ -86,11 +134,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
       print('🔵 인증 정보 가져오는 중...');
       final auth = await account.authentication;
-      final idToken = auth.idToken; // 서버에서 검증할 핵심 토큰
+      final idToken = auth.idToken;
       print('🔵 idToken 길이: ${idToken?.length}');
       if (idToken == null) throw Exception('idToken을 가져오지 못했습니다.');
 
-      // 백엔드 API 호출
       print('🔵 백엔드 API 호출: ${ApiConfig.baseUrl}/auth/google');
       final resp = await http.post(
         Uri.parse('${ApiConfig.baseUrl}/auth/google'),
@@ -114,7 +161,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (access == null) throw Exception('access_token 누락');
 
-      // 🔍 디버그: 토큰 출력
+      final appUser = user != null ? AppUser.fromJson(user) : null;
+
       print('✅ 로그인 성공!');
       print('📝 Access Token: $access');
       print('👤 User ID: $userId');
@@ -122,11 +170,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
       await _session.save(access, refresh, userId);
 
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => const SurveyScreen()),
-      );
+      if (appUser != null && mounted) {
+        context.read<UserProvider>().setUser(appUser);
+        print('routing with user');
+        print(appUser.surveyDone);
+        print(appUser.coupleMatched);
+        PostAuthNavigator.routeWithUser(
+          context,
+          user: appUser,
+        );
+      }
     } catch (e, stackTrace) {
       print('❌ Google Sign-In 에러: $e');
       print('❌ Stack trace: $stackTrace');
@@ -144,111 +197,190 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final themePink = const Color(0xFFFD9180);
+    const themePink = Color(0xFFFD9180);
+    const backgroundCream = Color(0xFFFAF8F5);
 
     return Scaffold(
+      backgroundColor: backgroundCream,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const SizedBox(height: 60),
+              const SizedBox(height: 32),
 
-              Container(
-                width: 120,
-                height: 120,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFEDEDED),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.favorite,
-                  size: 60,
-                  color: themePink,
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              Text(
-                '잇다',
-                style: TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                  color: themePink,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'AI가 추천하는 특별한 데이트',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 48),
-
-              TextField(
-                controller: _emailController,
-                decoration: InputDecoration(
-                  labelText: '이메일',
-                  prefixIcon: const Icon(Icons.email_outlined),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 16),
-
-              TextField(
-                controller: _passwordController,
-                obscureText: !_isPasswordVisible,
-                decoration: InputDecoration(
-                  labelText: '비밀번호',
-                  prefixIcon: const Icon(Icons.lock_outlined),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _isPasswordVisible
-                          ? Icons.visibility
-                          : Icons.visibility_off,
+              // ===== 상단 Hero 섹션 =====
+              Center(
+                child: Column(
+                  children: [
+                    Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFFFC0AE), themePink],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: themePink.withOpacity(0.25),
+                            blurRadius: 18,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.favorite_rounded,
+                        size: 56,
+                        color: Colors.white,
+                      ),
                     ),
-                    onPressed: () {
-                      setState(() {
-                        _isPasswordVisible = !_isPasswordVisible;
-                      });
-                    },
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
+                    const SizedBox(height: 24),
+                    const Text(
+                      '잇다',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        color: themePink,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'AI가 추천하는 특별한 데이트',
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.4,
+                        color: Color(0xFF7A6C66),//Colors.grey[600],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 24),
 
-              ElevatedButton(
-                onPressed: _login,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: themePink,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+              const SizedBox(height: 40),
+
+              // ===== 로그인 카드 =====
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
                 ),
-                child: const Text(
-                  '로그인',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _emailController,
+                      decoration: InputDecoration(
+                        labelText: '이메일',
+                        prefixIcon: const Icon(Icons.email_outlined),
+                        filled: true,
+                        fillColor: const Color(0xFFFDF8F6),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              const BorderSide(color: Colors.transparent),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              const BorderSide(color: Colors.transparent),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              const BorderSide(color: themePink, width: 1.6),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            vertical: 14, horizontal: 12),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _passwordController,
+                      obscureText: !_isPasswordVisible,
+                      decoration: InputDecoration(
+                        labelText: '비밀번호',
+                        prefixIcon: const Icon(Icons.lock_outline_rounded),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isPasswordVisible
+                                ? Icons.visibility
+                                : Icons.visibility_off,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _isPasswordVisible = !_isPasswordVisible;
+                            });
+                          },
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFFDF8F6),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              const BorderSide(color: Colors.transparent),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              const BorderSide(color: Colors.transparent),
+                        ),
+                        focusedBorder: const OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(12)),
+                          borderSide: BorderSide(
+                            color: themePink,
+                            width: 1.6,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            vertical: 14, horizontal: 12),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 16),
 
+              const SizedBox(height: 20),
+
+              // ===== 로그인 버튼 =====
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _login,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: themePink,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text('로그인'),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // ===== 회원가입 링크 =====
               TextButton(
                 onPressed: () {
                   Navigator.push(
@@ -258,34 +390,60 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   );
                 },
-                child: const Text('계정이 없으신가요? 회원가입'),
+                child: Text(
+                  '계정이 없으신가요? 회원가입',
+                  style: TextStyle(
+                    color: Color(0xFF6B4A3C),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
-              const SizedBox(height: 24),
+
+              const SizedBox(height: 16),
 
               Row(
                 children: [
                   Expanded(child: Divider(color: Colors.grey[300])),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text('또는', style: TextStyle(color: Colors.grey)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Text(
+                      '또는',
+                      style: TextStyle(
+                        color: Color(0xFFBDB6B2),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
                   Expanded(child: Divider(color: Colors.grey[300])),
                 ],
               ),
-              const SizedBox(height: 24),
 
-              // ▼ 여기 변경: 실제 구글 로그인 호출
+              const SizedBox(height: 16),
+
+              // ===== Google 로그인 버튼 =====
               OutlinedButton.icon(
                 onPressed: _googleLoading ? null : _handleGoogleSignIn,
-                icon: const Icon(Icons.g_mobiledata, size: 32),
-                label: Text(_googleLoading ? '로그인 중…' : 'Google로 계속하기'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                icon: const Icon(Icons.g_mobiledata, size: 28),
+                label: Text(
+                  _googleLoading ? '로그인 중…' : 'Google로 계속하기',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: Color(0xFF6B4A3C),
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  side: const BorderSide(color: Color(0xFFE0E0E0)),
+                  foregroundColor: Color(0xFF6B4A3C),
+                  backgroundColor: Colors.white,
+                ),
               ),
+              const SizedBox(height: 8),
             ],
           ),
         ),

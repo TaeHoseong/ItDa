@@ -1,11 +1,12 @@
 """
 Authentication endpoints
 """
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.supabase_client import get_supabase
 from app.core.security import verify_google_token, create_access_token
 from app.models.user import User
-from app.schemas.auth import GoogleLoginRequest, TokenResponse
+from app.schemas.auth import GoogleLoginRequest, TokenResponse, UserRegisterRequest, UserLoginRequest
 from app.schemas.user import UserCreate, UserResponse
 from app.services.user_service import UserService
 
@@ -106,25 +107,23 @@ async def google_login(request: GoogleLoginRequest):
         )
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(
-    user_data: UserCreate,
+    user_data: UserRegisterRequest,
 ):
     """
-    User registration endpoint (Phase 10.2)
+    User registration endpoint with password (Phase 10.2.2)
 
-    Create a new user account with profile information.
-    Note: This endpoint expects the user to have already authenticated with Google OAuth,
-    and the user_id should be the Google ID.
+    Create a new user account with email and password.
 
     Args:
-        user_data: UserCreate schema with registration info
+        user_data: UserRegisterRequest with email, password, and optional profile info
 
     Returns:
-        UserResponse with created user info
+        TokenResponse with access_token and user info
 
     Raises:
-        HTTPException 400: If email or nickname already exists
+        HTTPException 400: If email already exists
         HTTPException 500: If database operation fails
     """
     try:
@@ -133,36 +132,69 @@ async def register(
         # Check if email already exists
         existing_user = user_service.get_by_email(user_data.email)
         if existing_user:
+            # Check if it's a Google OAuth account
+            if existing_user.get("password_hash") is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already registered with Google login. Please sign in with Google."
+                )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
             )
 
-        # Check if nickname already exists
-        existing_nickname = user_service.get_by_nickname(user_data.nickname)
-        if existing_nickname:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Nickname already taken"
-            )
+        # Check if nickname already exists (if provided)
+        if user_data.nickname:
+            existing_nickname = user_service.get_by_nickname(user_data.nickname)
+            if existing_nickname:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Nickname already taken"
+                )
 
-        # Generate user_id (for now, use email as placeholder)
-        # In production, this should come from Google OAuth
+        # Generate user_id from email
         user_id = f"user_{user_data.email.replace('@', '_').replace('.', '_')}"
 
-        # Create user
-        user = user_service.create_user(user_data, user_id)
+        # Hash password with bcrypt
+        password_hash = bcrypt.hashpw(
+            user_data.password.encode('utf-8'),
+            bcrypt.gensalt()
+        ).decode('utf-8')
 
-        return UserResponse(
-            user_id=user.user_id,
-            email=user.email,
-            name=user.name,
-            picture=user.picture,
-            nickname=user.nickname,
-            birthday=user.birthday,
-            gender=user.gender,
-            couple_id=user.couple_id,
-            survey_done=user.survey_done
+        # Convert UserRegisterRequest to UserCreate for service layer
+        user_create_data = UserCreate(
+            email=user_data.email,
+            name=user_data.name,
+            nickname=user_data.nickname,
+            birthday=user_data.birthday,
+            gender=user_data.gender,
+            picture=None
+        )
+
+        # Create user with password hash
+        user = user_service.create_user(user_create_data, user_id, password_hash)
+
+        # Generate JWT access token and store in database
+        access_token = create_access_token(user["user_id"])
+        supabase = get_supabase()
+        response = (
+            supabase.table("users")
+            .update({"token": access_token})
+            .eq("user_id", user["user_id"])
+            .execute()
+        )
+        updated_user = response.data[0]
+
+        return TokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            user={
+                "user_id": updated_user["user_id"],
+                "email": updated_user["email"],
+                "name": updated_user.get("name"),
+                "nickname": updated_user.get("nickname"),
+                "survey_done": updated_user.get("survey_done", False)
+            }
         )
 
     except HTTPException:
@@ -176,48 +208,74 @@ async def register(
 
 @router.post("/login", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 async def login(
-    email: str,
+    login_data: UserLoginRequest,
 ):
     """
-    User login endpoint (Phase 10.2)
+    User login endpoint with password verification (Phase 10.2.2)
 
-    Login with email and receive JWT token.
-    Note: In production, this should be integrated with Google OAuth flow.
+    Login with email and password, receive JWT token.
 
     Args:
-        email: User's email address
+        login_data: UserLoginRequest with email and password
 
     Returns:
         TokenResponse with access_token and user info
 
     Raises:
         HTTPException 404: If user not found
+        HTTPException 401: If password is incorrect
+        HTTPException 400: If account uses Google OAuth
         HTTPException 500: If database operation fails
     """
     try:
         user_service = UserService()
 
         # Find user by email
-        user = user_service.get_by_email(email)
+        user = user_service.get_by_email(login_data.email)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found. Please register first."
             )
 
-        # Generate JWT access token
-        access_token = create_access_token(user.user_id)
+        # Check if this is a Google OAuth account (no password)
+        if user.get("password_hash") is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This account uses Google login. Please sign in with Google."
+            )
+
+        # Verify password
+        if not bcrypt.checkpw(
+            login_data.password.encode('utf-8'),
+            user["password_hash"].encode('utf-8')
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+
+        # Generate JWT access token and store in database
+        access_token = create_access_token(user["user_id"])
+        supabase = get_supabase()
+        response = (
+            supabase.table("users")
+            .update({"token": access_token})
+            .eq("user_id", user["user_id"])
+            .execute()
+        )
+        updated_user = response.data[0]
 
         # Return token and user info
         return TokenResponse(
             access_token=access_token,
             token_type="bearer",
             user={
-                "user_id": user.user_id,
-                "email": user.email,
-                "name": user.name,
-                "nickname": user.nickname,
-                "survey_done": user.survey_done
+                "user_id": updated_user["user_id"],
+                "email": updated_user["email"],
+                "name": updated_user.get("name"),
+                "nickname": updated_user.get("nickname"),
+                "survey_done": updated_user.get("survey_done", False)
             }
         )
 
