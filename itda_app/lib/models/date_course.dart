@@ -1,6 +1,6 @@
 /// 데이트 코스 모델
 class DateCourse {
-  final int? id;            // ⬅️ 백엔드 코스 ID (옵션)
+  final String? id;
   final String date;
   final String template;
   final String startTime;
@@ -22,7 +22,7 @@ class DateCourse {
 
   factory DateCourse.fromJson(Map<String, dynamic> json) {
     return DateCourse(
-      id: json['id'] as int?,                          // ⬅️ 추가
+      id: json['course_id'] as String?,
       date: json['date'] as String,
       template: json['template'] as String,
       startTime: json['start_time'] as String,
@@ -37,7 +37,7 @@ class DateCourse {
 
   Map<String, dynamic> toJson() {
     return {
-      if (id != null) 'id': id,                        // ⬅️ 추가
+      if (id != null) 'course_id': id,
       'date': date,
       'template': template,
       'start_time': startTime,

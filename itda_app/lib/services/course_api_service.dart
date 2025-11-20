@@ -65,7 +65,7 @@ class CourseApiService {
   }
 
   /// 특정 코스 조회
-  static Future<DateCourse> getCourse(int courseId) async {
+  static Future<DateCourse> getCourse(String courseId) async {
     final token = await _token();
     if (token == null) {
       throw Exception('로그인이 필요합니다. 토큰이 없습니다.');
@@ -127,7 +127,7 @@ class CourseApiService {
   }
 
   /// 코스 삭제
-  static Future<void> deleteCourse(int courseId) async {
+  static Future<void> deleteCourse(String courseId) async {
     final token = await _token();
     if (token == null) {
       throw Exception('로그인이 필요합니다. 토큰이 없습니다.');
