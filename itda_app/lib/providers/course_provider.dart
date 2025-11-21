@@ -280,7 +280,7 @@ class CourseProvider extends ChangeNotifier {
 
       await supabase
           .from('couples')
-          .update({'courses': updatedIds})
+          .update({'schedules': updatedIds})
           .eq('couple_id', _currentCoupleId!);
 
       // Supabase에서 돌아온 row를 다시 DateCourse로
@@ -380,7 +380,7 @@ class CourseProvider extends ChangeNotifier {
 
       await supabase
           .from('couples')
-          .update({'courses': updatedIds})
+          .update({'schedules': updatedIds})
           .eq('couple_id', _currentCoupleId!);
 
       _coursesById.remove(id);
