@@ -46,7 +46,7 @@ class CourseProvider extends ChangeNotifier {
 
   String? _currentCoupleId;
 
-  /// couples.courses 에 들어있는 course_id 리스트
+  /// couples.schedules 에 들어있는 course_id 리스트
   List<String> _courseIds = [];
 
   /// course_id -> DateCourse
@@ -129,10 +129,10 @@ class CourseProvider extends ChangeNotifier {
     try {
       final res = await supabase
           .from('couples')
-          .select('courses')
+          .select('schedules')
           .eq('couple_id', _currentCoupleId!)
           .maybeSingle();
-
+      print('[DEBUG] couples.schedules 응답: $res');
       if (res == null) {
         _courseIds = [];
         _coursesById.clear();
@@ -141,7 +141,7 @@ class CourseProvider extends ChangeNotifier {
         return;
       }
 
-      final List<dynamic> raw = res['courses'] ?? [];
+      final List<dynamic> raw = res['schedules'] ?? [];
       _courseIds = raw.cast<String>();
 
       await _loadCoursesForIds(_courseIds);
@@ -169,7 +169,7 @@ class CourseProvider extends ChangeNotifier {
       'total_distance, total_duration, slots',
     )
     .filter('course_id', 'in', ids);
-
+    print('[DEBUG] Supabase courses fetch rows: $rows');
     _coursesById.clear();
 
     for (final row in rows as List) {
@@ -193,7 +193,7 @@ class CourseProvider extends ChangeNotifier {
         'total_duration': base['total_duration'],
         'slots': base['slots'] ?? [],
       };
-
+      print('[DEBUG] courseJson: $courseJson');
       try {
         final dc = DateCourse.fromJson(courseJson);
         if (dc.id != null) {
@@ -210,6 +210,7 @@ class CourseProvider extends ChangeNotifier {
 
     if (_currentCoupleId == null || _currentCoupleId!.isEmpty) return;
 
+    debugPrint('[REALTIME] 구독 시작: couples:${_currentCoupleId!}');
     _coupleChannel = supabase
         .channel('public:couples:${_currentCoupleId!}')
         .onPostgresChanges(
@@ -222,15 +223,27 @@ class CourseProvider extends ChangeNotifier {
             value: _currentCoupleId!,
           ),
           callback: (payload) async {
+            debugPrint('-----------------------------');
+            debugPrint('[REALTIME] UPDATE 이벤트 도착!');
+            debugPrint('[REALTIME] old record: ${payload.oldRecord}');
+            debugPrint('[REALTIME] new record: ${payload.newRecord}');
+            debugPrint('-----------------------------');
             try {
               final newCourses =
-                  payload.newRecord['courses'] as List<dynamic>? ?? [];
+                  payload.newRecord['schedules'] as List<dynamic>? ?? [];
+              debugPrint('[REALTIME] new schedules: $newCourses');
               final newIds = newCourses.cast<String>();
 
+              debugPrint('[REALTIME] 기존 courseIds   → $_courseIds');
+              debugPrint('[REALTIME] 새로 들어온 newIds → $newIds');
+
               if (!listEquals(_courseIds, newIds)) {
+                debugPrint('[REALTIME] 값 변경됨 → courses 다시 로드');
                 _courseIds = newIds;
                 await _loadCoursesForIds(_courseIds);
                 notifyListeners();
+              } else {
+                debugPrint('[REALTIME] ⚠ 값 동일 → 업데이트 없이 종료');
               }
             } catch (e, st) {
               debugPrint('[CourseProvider] realtime payload 처리 오류: $e\n$st');
@@ -276,11 +289,11 @@ class CourseProvider extends ChangeNotifier {
 
       // couples.courses 배열에 추가
       final updatedIds = [..._courseIds, newId];
-      _courseIds = updatedIds; // 미리 반영 (realtime payload와 맞추기)
+      // _courseIds = updatedIds; // 미리 반영 (realtime payload와 맞추기)
 
       await supabase
           .from('couples')
-          .update({'courses': updatedIds})
+          .update({'schedules': updatedIds})
           .eq('couple_id', _currentCoupleId!);
 
       // Supabase에서 돌아온 row를 다시 DateCourse로
@@ -380,7 +393,7 @@ class CourseProvider extends ChangeNotifier {
 
       await supabase
           .from('couples')
-          .update({'courses': updatedIds})
+          .update({'schedules': updatedIds})
           .eq('couple_id', _currentCoupleId!);
 
       _coursesById.remove(id);

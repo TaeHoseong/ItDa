@@ -3,7 +3,7 @@ Match request schemas (Code-based matching)
 """
 from pydantic import BaseModel
 from datetime import datetime
-
+from typing import Optional
 
 class MatchCodeResponse(BaseModel):
     """매칭 코드 생성 응답"""
@@ -21,5 +21,5 @@ class MatchConnectResponse(BaseModel):
     couple_id: str
     partner_user_id: str
     partner_name: str
-    partner_nickname: str
+    partner_nickname: Optional[str] = None
     created_at: datetime
