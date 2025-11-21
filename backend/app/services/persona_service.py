@@ -5,6 +5,7 @@ from app.services.openai_service import analyze_intent
 from app.services.suggest_service import SuggestService
 from app.core.supabase_client import get_supabase
 from app.services.course_service import CourseService
+from app.services.schedule_service import ScheduleService
 from app.schemas.course import CoursePreferences
 
 class PersonaService:
@@ -70,6 +71,8 @@ class PersonaService:
             response_data = await self._handle_select_place(session, intent)
         elif action == "generate_course":
             response_data = self._handle_generate_course(session, intent, request.user_id)
+        elif action == "view_schedule":
+            response_data = self._handle_view_schedule(session, intent, request.user_id)
         elif action == "regenerate_course_slot":
             print(f"\n[ACTION] Calling _handle_regenerate_course_slot")
             response_data = self._handle_regenerate_course_slot(session, intent, request.user_id)
@@ -509,3 +512,112 @@ class PersonaService:
                 "action_taken": "error",
                 "message": f"슬롯 재생성 중 오류가 발생했습니다: {str(e)}"
             }
+            
+    def _handle_view_schedule(self, session: dict, intent: dict, user_id: str = None) -> dict:
+        """일정 조회 처리"""
+
+        # pending_data 초기화 (일정 조회는 독립적인 액션)
+        session["pending_data"] = {}
+
+        if not self.supabase:
+            return {
+                "action_taken": "error",
+                "message": "데이터베이스 연결이 필요합니다."
+            }
+
+        if not user_id:
+            return {
+                "action_taken": "error",
+                "message": "로그인이 필요합니다."
+            }
+
+        extracted = intent.get("extracted_data", {})
+        timeframe = extracted.get("timeframe", "all")
+
+        print(f"\n{'='*60}")
+        print(f"[VIEW SCHEDULE]")
+        print(f"   User ID: {user_id}")
+        print(f"   Timeframe: {timeframe}")
+        print(f"   Current datetime: {datetime.now()}")
+        print(f"{'='*60}\n")
+        
+        
+        schedule_service = ScheduleService()
+        # 시간 범위 계산
+        now = datetime.now()
+        schedules = []
+
+        if timeframe == "today":
+            schedules = schedule_service.get_by_date(user_id, now)
+        elif timeframe == "tomorrow":
+            tomorrow = now + timedelta(days=1)
+            schedules = schedule_service.get_by_date(user_id, tomorrow)
+        elif timeframe == "this_week":
+            # 이번 주 월요일 ~ 일요일
+            start_of_week = now - timedelta(days=now.weekday())
+            schedules = []
+            # 월~일 각 날짜별로 조회
+            for i in range(7):
+                day = start_of_week + timedelta(days=i)
+                day_schedules = schedule_service.get_by_date(user_id, day)
+                schedules.extend(day_schedules)
+        else:  # "all"
+            schedules = schedule_service.get_by_user(user_id)
+
+        print(f"[FOUND] {len(schedules)} schedule(s)")
+
+        # 일정 포맷팅
+        formatted_message = None
+        formatted_message = ""
+        if len(schedules) == 0:
+            # TODO: 일정이 없을 경우 "일정을 알려드릴게요!"하는 에러 처리용. 임시이므로 좀 더 개선 필요 (홍재형) 
+            formatted_message = f"{timeframe}에는 아직 일정이 없어요!"
+        else:
+            for i, schedule in enumerate(schedules, 1):
+                schedule_lines = []
+                for idx, slot in enumerate(schedule, 1):
+                    time_str = slot['time'] if slot['time'] else "시간 미정"
+                    duration = slot['duration'] if slot['duration'] else ""
+
+                    place_str = f" @ {slot['place_name']}" if ['place_name'] else ""
+
+                    schedule_lines.append(
+                        f"-{idx}. [{time_str} for {duration}min.]{place_str}"
+                    )
+                
+                formatted_message += "\n"+ f"{i}번째 일정:\n" + "\n".join(schedule_lines)
+
+        # 응답 데이터 준비
+        # 11.21 : schedules_data 일단 주석처리. 이거 어디 쓰이는건지?
+        schedules_data = [
+            # {
+            #     "id": s['id'],
+            #     "course_id": s['course_id'],
+            #     "couple_id": s["couple_id"],
+            #     # "title": s['title'],
+            #     "date": s["date"].isoformat() if isinstance(s["date"], datetime) else s["date"],
+            #     "time": s['start_time'],
+            #     "slots": s['slots'],
+            #     # "latitude": s.latitude,
+            #     # "longitude": s.longitude,
+            #     # "address": s.address
+            # }
+            # for s in schedules
+        ]
+
+        print(f"[RESPONSE]\n{formatted_message if formatted_message else 'No schedules'}\n")
+        print(f"{'='*60}\n")
+
+        result = {
+            "action_taken": "schedules_retrieved",
+            "schedules": schedules_data,
+            "count": len(schedules),
+            "timeframe": timeframe,
+        }
+
+        # 일정이 있을 때만 improved_message 설정 (OpenAI 메시지 유지)
+        if formatted_message:
+            result["formatted_message"] = formatted_message
+            result["improved_message"] = formatted_message
+
+        return result
