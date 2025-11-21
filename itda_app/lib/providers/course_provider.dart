@@ -287,7 +287,7 @@ class CourseProvider extends ChangeNotifier {
           .select()
           .single();
 
-      // couples.courses 배열에 추가
+      // couples.schedules 배열에 추가
       final updatedIds = [..._courseIds, newId];
       // _courseIds = updatedIds; // 미리 반영 (realtime payload와 맞추기)
 
