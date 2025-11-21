@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, persona, places, schedules, users, courses, match
+from app.api.v1.endpoints import auth, persona, places, users, courses, match
 
 api_router = APIRouter()
 
@@ -29,13 +29,6 @@ api_router.include_router(
     places.router,
     prefix="/places",
     tags=["places"]
-)
-
-# 일정 관리/수정
-api_router.include_router(
-    schedules.router,
-    prefix="/schedules",
-    tags=["schedules"]
 )
 
 # 코스 관리

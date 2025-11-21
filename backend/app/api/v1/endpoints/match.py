@@ -210,7 +210,7 @@ async def connect_with_code(
                 "user_id1": current_user["user_id"],
                 "user_id2": partner["user_id"],
                 "features": couple_features,
-                "schedules": [],
+                "courses": [],  # courses 테이블의 course_id 배열
                 "diary": [],
                 "chat_history": []
             })
