@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.supabase_client import get_supabase
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_current_user_full
 from app.schemas.match import MatchCodeResponse, MatchConnectRequest, MatchConnectResponse
 
 
@@ -94,7 +94,7 @@ async def generate_code(
 @router.post("/connect", response_model=MatchConnectResponse, status_code=status.HTTP_201_CREATED)
 async def connect_with_code(
     request_data: MatchConnectRequest,
-    current_user = Depends(get_current_user),
+    current_user = Depends(get_current_user_full),
 ):
     """
     매칭 코드로 커플 연결
@@ -210,7 +210,7 @@ async def connect_with_code(
                 "user_id1": current_user["user_id"],
                 "user_id2": partner["user_id"],
                 "features": couple_features,
-                "courses": [],  # courses 테이블의 course_id 배열
+                "schedules": [],  # courses 테이블의 course_id 배열
                 "diary": [],
                 "chat_history": []
             })

@@ -212,6 +212,7 @@ class _GenerateCodeScreenState extends State<GenerateCodeScreen> {
   String? _matchCode;
   DateTime? _expiresAt;
   bool _loading = false;
+  bool _checking = false;
 
   Future<void> _fetchCode() async {
     setState(() => _loading = true);
@@ -243,6 +244,51 @@ class _GenerateCodeScreenState extends State<GenerateCodeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('코드가 클립보드에 복사되었습니다')),
     );
+  }
+
+  /// 내가 만든 코드에 상대가 매칭을 완료했는지 확인
+  Future<void> _checkMatched() async {
+    if (_checking) return;
+
+    setState(() => _checking = true);
+
+    try {
+      // 1) 내 최신 유저 정보 조회
+      final me = await UserApiService.fetchMe();
+      final coupleId = me['couple_id'] as String?;
+
+      if (!mounted) return;
+
+      if (coupleId == null) {
+        // 아직 상대방이 코드를 안 넣었거나 매칭이 안 끝남
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('아직 매칭이 완료되지 않았어요 😢')),
+        );
+        return;
+      }
+
+      // 2) coupleId를 로컬 상태에 반영
+      context.read<UserProvider>().setCoupleId(coupleId);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('매칭이 완료되었습니다!')),
+      );
+
+      // 3) 메인 화면으로 이동
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const MainScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      final msg = e.toString().replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg)),
+      );
+    } finally {
+      if (mounted) setState(() => _checking = false);
+    }
   }
 
   @override
@@ -388,6 +434,42 @@ class _GenerateCodeScreenState extends State<GenerateCodeScreen> {
                   ],
                 ),
               ),
+
+              const SizedBox(height: 24),
+
+              // ✅ 매칭 완료 확인 버튼
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _checking ? null : _checkMatched,
+                  icon: _checking
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(Icons.check_circle_outline_rounded),
+                  label: Text(_checking ? '확인 중...' : '매칭 완료 확인하기'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: mainColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    elevation: 0,
+                  ),
+                ),
+              ),
+
               const Spacer(),
             ],
           ),
@@ -454,9 +536,6 @@ class _EnterCodeScreenState extends State<EnterCodeScreen> {
         context.read<UserProvider>().setCoupleId(coupleId);
       }
 
-      // (선택) 나중에 /users/me 다시 불러와서 전체 User 갱신하고 싶으면
-      // UserApiService.fetchMe() 같은 거 만들어서 setUser(...) 호출하면 됨.
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('커플 연동이 완료되었습니다!')),
       );
@@ -476,7 +555,6 @@ class _EnterCodeScreenState extends State<EnterCodeScreen> {
       if (mounted) setState(() => _submitting = false);
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
