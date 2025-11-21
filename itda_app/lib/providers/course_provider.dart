@@ -122,8 +122,6 @@ class CourseProvider extends ChangeNotifier {
   }
 
   Future<void> _loadCoupleCoursesOnce() async {
-    // _ensureCouple();
-
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -177,10 +175,17 @@ class CourseProvider extends ChangeNotifier {
     for (final row in rows as List) {
       final base = row as Map<String, dynamic>;
 
+      // date 필드를 YYYY-MM-DD 형식으로 normalize
+      String normalizedDate = base['date'];
+      if (normalizedDate.contains('T')) {
+        // ISO 8601 형식이면 날짜 부분만 추출
+        normalizedDate = normalizedDate.split('T')[0];
+      }
+
       // slots 필드로 DateCourse 구성
       final courseJson = {
         'course_id': base['course_id'],
-        'date': base['date'],
+        'date': normalizedDate,
         'template': base['template'],
         'start_time': base['start_time'],
         'end_time': base['end_time'],
@@ -189,9 +194,13 @@ class CourseProvider extends ChangeNotifier {
         'slots': base['slots'] ?? [],
       };
 
-      final dc = DateCourse.fromJson(courseJson);
-      if (dc.id != null) {
-        _coursesById[dc.id!] = dc;
+      try {
+        final dc = DateCourse.fromJson(courseJson);
+        if (dc.id != null) {
+          _coursesById[dc.id!] = dc;
+        }
+      } catch (e, stackTrace) {
+        debugPrint('[CourseProvider] 코스 파싱 실패: $e');
       }
     }
   }
