@@ -16,7 +16,7 @@ from app.schemas.course import (
     DateCourse, CourseSlot, SlotConfig, CoursePreferences
 )
 from app.services.suggest_service import SuggestService
-
+from app.core.supabase_client import get_supabase
 
 class CourseService:
     """데이트 코스 생성 서비스"""
@@ -59,7 +59,8 @@ class CourseService:
 
     def __init__(self):
         self.suggest_service = SuggestService()
-
+        self.supabase = get_supabase()
+        
     def generate_date_course(
         self,
         user_id: str,
@@ -493,136 +494,150 @@ class CourseService:
 
     # ========== CRUD Methods ==========
 
-    def create_course(self, db, user_id: str, course_data: dict) -> 'Course':
+    def create_course(self, user_id: str, course_data: dict) -> dict:
         """
         Create a new course in database
 
         Args:
-            db: Database session
             user_id: User ID (creator)
             course_data: Course data from CourseCreate schema
 
         Returns:
-            Created Course object
+            Created course dict
         """
-        from app.models.course import Course
         import uuid
+        course_id = str(uuid.uuid4())
+        payload = {
+            "course_id": course_id,
+            "user_id": user_id,
+            "couple_id": course_data.get("couple_id"),
+            "date": course_data["date"],
+            "template": course_data["template"],
+            "slots": course_data["slots"],              # JSONB array
+            "total_distance": course_data.get("total_distance", 0.0),
+            "total_duration": course_data.get("total_duration", 0),
+            "start_time": course_data["start_time"],
+            "end_time": course_data["end_time"],
+        }
 
-        course = Course(
-            course_id=str(uuid.uuid4()),
-            user_id=user_id,
-            couple_id=course_data.get('couple_id'),
-            date=course_data['date'],
-            template=course_data['template'],
-            slots=course_data['slots'],
-            total_distance=course_data.get('total_distance', 0.0),
-            total_duration=course_data.get('total_duration', 0),
-            start_time=course_data['start_time'],
-            end_time=course_data['end_time']
+        response = (
+            self.supabase.table("courses")
+            .insert(payload)
+            .execute()
         )
+        
+        if not response.data:
+            raise RuntimeError("Failed to create course in Supabase")
 
-        db.add(course)
-        db.commit()
-        db.refresh(course)
-        return course
+        return response.data[0]
 
-    def get_course(self, db, course_id: str) -> Optional['Course']:
+    def get_course(self, course_id: str) -> Optional[dict]:
         """
         Get course by ID
 
         Args:
-            db: Database session
             course_id: Course ID
 
         Returns:
             Course object or None
         """
-        from app.models.course import Course
-        return db.query(Course).filter(Course.course_id == course_id).first()
+        response = (
+            self.supabase.table("courses")
+            .select("*")
+            .eq("course_id", course_id)
+            .execute()
+        )
+        
+        if not response.data:
+            raise RuntimeError("Failed to get course in Supabase")
 
-    def get_courses_by_user(self, db, user_id: str) -> List['Course']:
+        return response.data[0]
+        
+
+    def get_courses_by_user(self, user_id: str) -> List[dict]:
         """
         Get all courses by user ID
 
         Args:
-            db: Database session
             user_id: User ID
 
         Returns:
             List of Course objects
         """
-        from app.models.course import Course
-        return db.query(Course).filter(Course.user_id == user_id).order_by(Course.created_at.desc()).all()
+        response = (
+            self.supabase.table("courses")
+            .select("*")
+            .eq("user_id", user_id)
+            .execute()
+        )
 
-    def get_courses_by_couple(self, db, couple_id: str) -> List['Course']:
+        # Empty list is valid, not an error
+        return response.data if response.data else []
+    
+    def get_courses_by_couple(self, couple_id: str) -> List[dict]:
         """
         Get all courses by couple ID
 
         Args:
-            db: Database session
             couple_id: Couple ID
 
         Returns:
             List of Course objects
         """
-        from app.models.course import Course
-        return db.query(Course).filter(Course.couple_id == couple_id).order_by(Course.created_at.desc()).all()
+        response = (
+            self.supabase.table("courses")
+            .select("*")
+            .eq("couple_id", couple_id)
+            .execute()
+        )
+        
+        if not response.data:
+            raise RuntimeError("Failed to get course in Supabase")
 
-    def update_course(self, db, course_id: str, course_data: dict) -> Optional['Course']:
+        return response.data[0]
+    
+    def update_course(self, course_id: str, course_data: dict):
         """
-        Update course
+        Update course in Supabase
 
         Args:
-            db: Database session
             course_id: Course ID
-            course_data: Updated course data from CourseUpdate schema
+            course_data: dict with updated fields
 
         Returns:
-            Updated Course object or None
+            Updated course dict or None
         """
-        from app.models.course import Course
+        # 1. update 실행
+        response = (
+            self.supabase.table("courses")
+            .update(course_data)
+            .eq("course_id", course_id)
+            .execute()
+        )
 
-        course = self.get_course(db, course_id)
-        if not course:
+        # 2. 업데이트 결과 확인
+        if not response.data:
             return None
 
-        # Update fields if provided
-        if 'date' in course_data and course_data['date'] is not None:
-            course.date = course_data['date']
-        if 'template' in course_data and course_data['template'] is not None:
-            course.template = course_data['template']
-        if 'slots' in course_data and course_data['slots'] is not None:
-            course.slots = course_data['slots']
-        if 'total_distance' in course_data and course_data['total_distance'] is not None:
-            course.total_distance = course_data['total_distance']
-        if 'total_duration' in course_data and course_data['total_duration'] is not None:
-            course.total_duration = course_data['total_duration']
-        if 'start_time' in course_data and course_data['start_time'] is not None:
-            course.start_time = course_data['start_time']
-        if 'end_time' in course_data and course_data['end_time'] is not None:
-            course.end_time = course_data['end_time']
-
-        db.commit()
-        db.refresh(course)
-        return course
-
-    def delete_course(self, db, course_id: str) -> bool:
+        # 3. updated course 반환
+        return response.data[0]
+    
+    def delete_course(self, course_id: str) -> bool:
         """
-        Delete course
+        Delete course from Supabase
 
         Args:
-            db: Database session
             course_id: Course ID
 
         Returns:
-            True if deleted, False if not found
+            True if deleted, False otherwise
         """
-        from app.models.course import Course
+        response = (
+            self.supabase.table("courses")
+            .delete()
+            .eq("course_id", course_id)
+            .execute()
+        )
 
-        course = self.get_course(db, course_id)
-        if not course:
-            return False
-
-        db.delete(course)
-        db.commit()
-        return True
+        # 삭제된 row가 있으면 삭제 성공
+        return bool(response.data)

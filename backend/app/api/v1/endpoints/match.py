@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.supabase_client import get_supabase
-from app.api.v1.endpoints.users import get_current_user
+from app.core.dependencies import get_current_user
 from app.schemas.match import MatchCodeResponse, MatchConnectRequest, MatchConnectResponse
 
 
@@ -210,7 +210,7 @@ async def connect_with_code(
                 "user_id1": current_user["user_id"],
                 "user_id2": partner["user_id"],
                 "features": couple_features,
-                "schedules": [],
+                "courses": [],  # courses 테이블의 course_id 배열
                 "diary": [],
                 "chat_history": []
             })

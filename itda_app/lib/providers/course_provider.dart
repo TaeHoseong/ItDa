@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:uuid/uuid.dart';
@@ -121,7 +122,7 @@ class CourseProvider extends ChangeNotifier {
   }
 
   Future<void> _loadCoupleCoursesOnce() async {
-    _ensureCouple();
+    // _ensureCouple();
 
     _isLoading = true;
     _error = null;
@@ -167,7 +168,7 @@ class CourseProvider extends ChangeNotifier {
     .from('courses')
     .select(
       'course_id, couple_id, date, template, start_time, end_time, '
-      'total_distance, total_duration, course',
+      'total_distance, total_duration, slots',
     )
     .filter('course_id', 'in', ids);
 
@@ -175,16 +176,18 @@ class CourseProvider extends ChangeNotifier {
 
     for (final row in rows as List) {
       final base = row as Map<String, dynamic>;
-      final courseJson = Map<String, dynamic>.from(base['course'] ?? {});
 
-      // meta 필드 합치기
-      courseJson['course_id'] = base['course_id'];
-      courseJson['date'] = base['date'];
-      courseJson['template'] = base['template'];
-      courseJson['start_time'] = base['start_time'];
-      courseJson['end_time'] = base['end_time'];
-      courseJson['total_distance'] = base['total_distance'];
-      courseJson['total_duration'] = base['total_duration'];
+      // slots 필드로 DateCourse 구성
+      final courseJson = {
+        'course_id': base['course_id'],
+        'date': base['date'],
+        'template': base['template'],
+        'start_time': base['start_time'],
+        'end_time': base['end_time'],
+        'total_distance': base['total_distance'],
+        'total_duration': base['total_duration'],
+        'slots': base['slots'] ?? [],
+      };
 
       final dc = DateCourse.fromJson(courseJson);
       if (dc.id != null) {
@@ -234,17 +237,18 @@ class CourseProvider extends ChangeNotifier {
 
   /// 코스 생성 (슬롯 포함 전체)
   Future<DateCourse> createCourse(DateCourse course) async {
-    _ensureCouple();
+    // _ensureCouple();
 
     try {
       final String newId = course.id ?? const Uuid().v4();
 
-      // course.toJson() 안에 course_id가 들어가도록
-      final courseJson = course.toJson()
-        ..['course_id'] = newId;
+      // user_id 가져오기 (FlutterSecureStorage에서)
+      const storage = FlutterSecureStorage();
+      final userId = await storage.read(key: 'user_id');
 
       final row = {
         'course_id': newId,
+        'user_id': userId,
         'couple_id': _currentCoupleId,
         'date': course.date,
         'template': course.template,
@@ -252,7 +256,7 @@ class CourseProvider extends ChangeNotifier {
         'end_time': course.endTime,
         'total_distance': course.totalDistance,
         'total_duration': course.totalDuration,
-        'course': courseJson,
+        'slots': course.slots.map((s) => s.toJson()).toList(),
       };
 
       final inserted = await supabase
@@ -271,15 +275,16 @@ class CourseProvider extends ChangeNotifier {
           .eq('couple_id', _currentCoupleId!);
 
       // Supabase에서 돌아온 row를 다시 DateCourse로
-      final insertedJson =
-          Map<String, dynamic>.from(inserted['course'] ?? {});
-      insertedJson['course_id'] = inserted['course_id'];
-      insertedJson['date'] = inserted['date'];
-      insertedJson['template'] = inserted['template'];
-      insertedJson['start_time'] = inserted['start_time'];
-      insertedJson['end_time'] = inserted['end_time'];
-      insertedJson['total_distance'] = inserted['total_distance'];
-      insertedJson['total_duration'] = inserted['total_duration'];
+      final insertedJson = {
+        'course_id': inserted['course_id'],
+        'date': inserted['date'],
+        'template': inserted['template'],
+        'start_time': inserted['start_time'],
+        'end_time': inserted['end_time'],
+        'total_distance': inserted['total_distance'],
+        'total_duration': inserted['total_duration'],
+        'slots': inserted['slots'] ?? [],
+      };
 
       final created = DateCourse.fromJson(insertedJson);
 
@@ -297,7 +302,7 @@ class CourseProvider extends ChangeNotifier {
 
   /// 코스 전체 수정 (덮어쓰기)
   Future<DateCourse> updateCourse(DateCourse course) async {
-    _ensureCouple();
+    // _ensureCouple();
 
     if (course.id == null) {
       throw Exception('코스 ID가 없습니다.');
@@ -305,8 +310,6 @@ class CourseProvider extends ChangeNotifier {
 
     try {
       final id = course.id!;
-      final courseJson = course.toJson()
-        ..['course_id'] = id;
 
       final updateRow = {
         'date': course.date,
@@ -315,7 +318,7 @@ class CourseProvider extends ChangeNotifier {
         'end_time': course.endTime,
         'total_distance': course.totalDistance,
         'total_duration': course.totalDuration,
-        'course': courseJson,
+        'slots': course.slots.map((s) => s.toJson()).toList(),
       };
 
       final updated = await supabase
@@ -325,15 +328,16 @@ class CourseProvider extends ChangeNotifier {
           .select()
           .single();
 
-      final updatedJson =
-          Map<String, dynamic>.from(updated['course'] ?? {});
-      updatedJson['course_id'] = updated['course_id'];
-      updatedJson['date'] = updated['date'];
-      updatedJson['template'] = updated['template'];
-      updatedJson['start_time'] = updated['start_time'];
-      updatedJson['end_time'] = updated['end_time'];
-      updatedJson['total_distance'] = updated['total_distance'];
-      updatedJson['total_duration'] = updated['total_duration'];
+      final updatedJson = {
+        'course_id': updated['course_id'],
+        'date': updated['date'],
+        'template': updated['template'],
+        'start_time': updated['start_time'],
+        'end_time': updated['end_time'],
+        'total_distance': updated['total_distance'],
+        'total_duration': updated['total_duration'],
+        'slots': updated['slots'] ?? [],
+      };
 
       final dc = DateCourse.fromJson(updatedJson);
       _coursesById[id] = dc;
@@ -350,7 +354,7 @@ class CourseProvider extends ChangeNotifier {
 
   /// 코스 삭제
   Future<void> deleteCourse(DateCourse course) async {
-    _ensureCouple();
+    // _ensureCouple();
 
     if (course.id == null) return;
 

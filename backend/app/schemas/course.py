@@ -162,7 +162,7 @@ class CourseResponse(BaseModel):
     start_time: str
     end_time: str
     created_at: datetime
-    updated_at: datetime
+    updated_at: datetime = None
 
     class Config:
         from_attributes = True

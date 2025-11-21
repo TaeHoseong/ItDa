@@ -2,12 +2,10 @@ from typing import Dict
 from datetime import datetime, timedelta
 from app.schemas.persona import ChatRequest, ChatResponse
 from app.services.openai_service import analyze_intent
-from app.services.schedule_service import ScheduleService
 from app.services.suggest_service import SuggestService
 from app.core.supabase_client import get_supabase
 from app.services.course_service import CourseService
 from app.schemas.course import CoursePreferences
-from sqlalchemy.orm import Session
 
 class PersonaService:
     def __init__(self, sessions: Dict):
@@ -64,20 +62,12 @@ class PersonaService:
         elif action == "update_info":
             response_data = self._handle_update_info(session, intent)
 
-        elif action == "create_schedule":
-            response_data = await self._handle_create_schedule(session, intent)
-
-        elif action == "update_schedule":
-            response_data = await self._handle_update_schedule(session, intent)
-
         elif action == "recommend_place":
             response_data = self._handle_recommend_place(session, intent, request.user_id)
         elif action == "re_recommend_place":
             response_data = self._handle_re_recommend_place(session, intent, request.user_id)
         elif action == "select_place":
             response_data = await self._handle_select_place(session, intent)
-        elif action == "view_schedule":
-            response_data = self._handle_view_schedule(session, intent, request.user_id)
         elif action == "generate_course":
             response_data = self._handle_generate_course(session, intent, request.user_id)
         elif action == "regenerate_course_slot":
@@ -131,64 +121,6 @@ class PersonaService:
             "action_taken": "update_info",
             "pending_data": session["pending_data"],
             "missing_fields": missing
-        }
-
-    async def _handle_create_schedule(self, session: dict, intent: dict) -> dict:
-        """일정 생성 정보 수집 (실제 저장은 프론트엔드에서 처리)"""
-
-        # pending_data 사용 (이미 병합됨)
-        schedule_data = session["pending_data"].copy()
-
-        print(f"\n[CREATE SCHEDULE] Collecting schedule information")
-        print(f"   Data: {schedule_data}")
-
-        # 필수 정보 체크
-        is_complete = self._is_complete(schedule_data)
-
-        if is_complete:
-            # 정보 충분 → 프론트엔드에 전달 (DB 저장은 프론트가 처리)
-            session["pending_data"] = {}  # 초기화
-
-            print(f"[READY] Schedule data ready for frontend!")
-            print(f"   Title: {schedule_data['title']}")
-            print(f"   Date: {schedule_data['date']}")
-            print(f"   Time: {schedule_data['time']}\n")
-
-            # 메시지 개선
-            improved_message = (
-                f"일정을 추가할게요!\n\n"
-                f"제목: {schedule_data['title']}\n"
-                f"날짜: {schedule_data['date']}\n"
-                f"시간: {schedule_data['time']}"
-            )
-
-            return {
-                "action_taken": "schedule_ready",
-                "schedule_data": schedule_data,  # 프론트엔드가 이 데이터로 API 호출
-                "improved_message": improved_message
-            }
-        else:
-            # 정보 부족
-            missing = self._check_missing_fields(schedule_data)
-
-            print(f"[INFO NEEDED] Missing information")
-            print(f"   Missing fields: {missing}\n")
-
-            return {
-                "action_taken": "need_more_info",
-                "pending_data": schedule_data,
-                "missing_fields": missing
-            }
-
-    async def _handle_update_schedule(self, session: dict, intent: dict) -> dict:
-        """일정 수정 처리 (deprecated - DB 기반으로 변경 필요)"""
-
-        # TODO: 이 기능은 user_id 기반으로 리팩토링 필요
-        # 현재는 deprecated 상태
-
-        return {
-            "action_taken": "update_failed",
-            "message": "일정 수정 기능은 현재 업데이트 중입니다."
         }
 
     def _is_complete(self, data: dict) -> bool:
@@ -353,108 +285,6 @@ class PersonaService:
                 "missing_fields": missing,
                 "improved_message": improved_message
             }
-
-    def _handle_view_schedule(self, session: dict, intent: dict, user_id: str = None) -> dict:
-        """일정 조회 처리"""
-
-        # pending_data 초기화 (일정 조회는 독립적인 액션)
-        session["pending_data"] = {}
-
-        if not self.supabse:
-            return {
-                "action_taken": "error",
-                "message": "데이터베이스 연결이 필요합니다."
-            }
-
-        if not user_id:
-            return {
-                "action_taken": "error",
-                "message": "로그인이 필요합니다."
-            }
-
-        extracted = intent.get("extracted_data", {})
-        timeframe = extracted.get("timeframe", "all")
-
-        print(f"\n{'='*60}")
-        print(f"[VIEW SCHEDULE]")
-        print(f"   User ID: {user_id}")
-        print(f"   Timeframe: {timeframe}")
-        print(f"   Current datetime: {datetime.now()}")
-        print(f"{'='*60}\n")
-
-        # ScheduleService 인스턴스 생성 (DB session 전달)
-        schedule_service = ScheduleService(self.supabase)
-
-        # 시간 범위 계산
-        now = datetime.now()
-        schedules = []
-
-        if timeframe == "today":
-            schedules = schedule_service.get_by_date(user_id, now)
-        elif timeframe == "tomorrow":
-            tomorrow = now + timedelta(days=1)
-            schedules = schedule_service.get_by_date(user_id, tomorrow)
-        elif timeframe == "this_week":
-            # 이번 주 모든 일정 (월요일부터 일요일)
-            start_of_week = now - timedelta(days=now.weekday())
-            end_of_week = start_of_week + timedelta(days=6)
-
-            all_schedules = schedule_service.get_by_user(user_id)
-            schedules = [
-                s for s in all_schedules
-                if start_of_week.date() <= s.date.date() <= end_of_week.date()
-            ]
-        else:  # "all"
-            schedules = schedule_service.get_by_user(user_id)
-
-        print(f"[FOUND] {len(schedules)} schedule(s)")
-
-        # 일정 포맷팅
-        formatted_message = None
-        if schedules:
-            schedule_lines = []
-            for idx, schedule in enumerate(schedules, 1):
-                date_str = schedule.date.strftime("%Y-%m-%d (%A)")
-                time_str = schedule.time if schedule.time else "시간 미정"
-                place_str = f" @ {schedule.place_name}" if schedule.place_name else ""
-
-                schedule_lines.append(
-                    f"{idx}. [{date_str} {time_str}] {schedule.title}{place_str}"
-                )
-
-            formatted_message = "\n".join(schedule_lines)
-
-        # 응답 데이터 준비
-        schedules_data = [
-            {
-                "id": s.id,
-                "title": s.title,
-                "date": s.date.isoformat(),
-                "time": s.time,
-                "place_name": s.place_name,
-                "latitude": s.latitude,
-                "longitude": s.longitude,
-                "address": s.address
-            }
-            for s in schedules
-        ]
-
-        print(f"[RESPONSE]\n{formatted_message if formatted_message else 'No schedules'}\n")
-        print(f"{'='*60}\n")
-
-        result = {
-            "action_taken": "schedules_retrieved",
-            "schedules": schedules_data,
-            "count": len(schedules),
-            "timeframe": timeframe,
-        }
-
-        # 일정이 있을 때만 improved_message 설정 (OpenAI 메시지 유지)
-        if formatted_message:
-            result["formatted_message"] = formatted_message
-            result["improved_message"] = formatted_message
-
-        return result
 
     def _handle_generate_course(self, session: dict, intent: dict, user_id: str = None) -> dict:
         """데이트 코스 생성 처리"""

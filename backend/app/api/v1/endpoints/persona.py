@@ -1,6 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Dict
-from sqlalchemy.orm import Session
 from app.schemas.persona import ChatRequest, ChatResponse
 from app.services.persona_service import PersonaService
 
