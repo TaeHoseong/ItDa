@@ -31,6 +31,7 @@ def get_system_prompt():
 4. **select_place**: 추천된 장소 선택
 5. **generate_course**: 하루 데이트 코스 추천 요청
 6. **regenerate_course_slot**: 코스의 특정 슬롯 재생성 (예: "1번 슬롯 다른 장소로", "카페 다른 곳으로")
+7. **view_schedule**: 일정 조회 요청
 
 ## 정보 추출
 - 날짜: "내일"→{tomorrow.strftime('%Y-%m-%d')}, "모레"→{day_after.strftime('%Y-%m-%d')}
@@ -94,6 +95,9 @@ food와 category는 둘 다 추출할 수 있다.
 "파스타 맛집 추천해줘" → recommend_place (장소 추천)
 "데이트 장소 알려줘" → recommend_place (장소 추천)
 "어디 갈까?" → recommend_place (장소 추천)
+"내 일정 보여줘" → view_schedule (timeframe: all)
+"오늘 일정 뭐있어?" → view_schedule (timeframe: today)
+"이번 주 일정" → view_schedule (timeframe: this_week)
 "내일 데이트 코스 추천해줘" → generate_course (date: 내일, template: auto)
 "1번 슬롯 다른 장소로" → regenerate_course_slot (slot_index: 1)
 "카페 다른 곳으로" → regenerate_course_slot (slot_index를 카페 슬롯 번호로 추출)
@@ -188,7 +192,24 @@ def fallback_response(message: str, context: dict = None) -> dict:
             "message": "천만에요! 😊",
             "extracted_data": {}
         }
+        
+    # 일정 조회 키워드
+    view_keywords = ["일정 보여", "일정 알려", "일정 뭐", "일정 있어", "무슨 일정", "스케줄"]
+    if any(kw in message_lower for kw in view_keywords):
+        timeframe = "all"
+        if "오늘" in message_lower:
+            timeframe = "today"
+        elif "내일" in message_lower:
+            timeframe = "tomorrow"
+        elif "이번 주" in message_lower or "이번주" in message_lower:
+            timeframe = "this_week"
 
+        return {
+            "action": "view_schedule",
+            "message": "일정을 확인해드릴게요! 📅",
+            "extracted_data": {"timeframe": timeframe}
+        }
+        
     # 장소 추천 키워드
     recommend_keywords = ["추천", "장소", "어디", "데이트", "갈만한", "맛집", "카페"]
     if any(kw in message_lower for kw in recommend_keywords):
