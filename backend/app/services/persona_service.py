@@ -553,15 +553,14 @@ class PersonaService:
             tomorrow = now + timedelta(days=1)
             schedules = schedule_service.get_by_date(user_id, tomorrow)
         elif timeframe == "this_week":
-            # 이번 주 모든 일정 (월요일부터 일요일)
+            # 이번 주 월요일 ~ 일요일
             start_of_week = now - timedelta(days=now.weekday())
-            end_of_week = start_of_week + timedelta(days=6)
-
-            all_schedules = schedule_service.get_by_user(user_id)
-            schedules = [
-                s for s in all_schedules
-                if start_of_week.date() <= s.date.date() <= end_of_week.date()
-            ]
+            schedules = []
+            # 월~일 각 날짜별로 조회
+            for i in range(7):
+                day = start_of_week + timedelta(days=i)
+                day_schedules = schedule_service.get_by_date(user_id, day)
+                schedules.extend(day_schedules)
         else:  # "all"
             schedules = schedule_service.get_by_user(user_id)
 
