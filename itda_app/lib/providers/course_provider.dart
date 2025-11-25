@@ -1,3 +1,6 @@
+// lib/providers/course_provider.dart
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -39,7 +42,62 @@ class CalendarProvider extends ChangeNotifier {
 }
 
 /// =====================
-/// 코스 상태 + Supabase CRUD
+/// 슬롯별 일기 모델 (서버에 저장되는 형태)
+/// =====================
+class DiarySlotEntry {
+  final String placeName;
+  final String? address;
+  final int rating;      // 0~5
+  final String comment;  // 한줄평
+  final String? imageUrl; // Supabase Storage public URL
+
+  const DiarySlotEntry({
+    required this.placeName,
+    this.address,
+    this.rating = 0,
+    this.comment = '',
+    this.imageUrl,
+  });
+
+  DiarySlotEntry copyWith({
+    String? placeName,
+    String? address,
+    int? rating,
+    String? comment,
+    String? imageUrl,
+  }) {
+    return DiarySlotEntry(
+      placeName: placeName ?? this.placeName,
+      address: address ?? this.address,
+      rating: rating ?? this.rating,
+      comment: comment ?? this.comment,
+      imageUrl: imageUrl ?? this.imageUrl,
+    );
+  }
+
+  factory DiarySlotEntry.fromJson(Map<String, dynamic> json) {
+    return DiarySlotEntry(
+      placeName: json['place_name'] ?? '',
+      address: json['address'],
+      rating: (json['rating'] ?? 0) as int,
+      comment: json['comment'] ?? '',
+      imageUrl: json['image_url'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'place_name': placeName,
+      'address': address,
+      'rating': rating,
+      'comment': comment,
+      'image_url': imageUrl,
+    };
+  }
+}
+
+/// =====================
+/// 코스 상태 + Supabase CRUD + Diary CRUD
 /// =====================
 class CourseProvider extends ChangeNotifier {
   final SupabaseClient supabase = Supabase.instance.client;
@@ -51,6 +109,9 @@ class CourseProvider extends ChangeNotifier {
 
   /// course_id -> DateCourse
   final Map<String, DateCourse> _coursesById = {};
+
+  /// course_id -> DiarySlotEntry 리스트 (슬롯 순서와 동일)
+  final Map<String, List<DiarySlotEntry>> _diariesByCourseId = {};
 
   bool _isLoading = false;
   String? _error;
@@ -65,6 +126,17 @@ class CourseProvider extends ChangeNotifier {
   List<DateCourse> get allCourses => _coursesById.values.toList();
 
   DateCourse? getCourseById(String id) => _coursesById[id];
+
+  /// 특정 코스의 diary 전체 (슬롯 순서대로)
+  List<DiarySlotEntry>? getDiaryForCourse(String courseId) =>
+      _diariesByCourseId[courseId];
+
+  /// 특정 코스의 특정 슬롯 diary
+  DiarySlotEntry? getDiarySlot(String courseId, int slotIndex) {
+    final list = _diariesByCourseId[courseId];
+    if (list == null || slotIndex < 0 || slotIndex >= list.length) return null;
+    return list[slotIndex];
+  }
 
   /// 특정 날짜의 코스들
   List<DateCourse> getCoursesByDate(DateTime day) {
@@ -94,6 +166,7 @@ class CourseProvider extends ChangeNotifier {
     _currentCoupleId = coupleId;
     _courseIds = [];
     _coursesById.clear();
+    _diariesByCourseId.clear();
 
     await _subscribeCoupleCourses();
     await _loadCoupleCoursesOnce();
@@ -117,7 +190,9 @@ class CourseProvider extends ChangeNotifier {
 
   void _ensureCouple() {
     if (_currentCoupleId == null || _currentCoupleId!.isEmpty) {
-      throw StateError('CourseProvider: coupleId가 설정되지 않았습니다. initForCouple()를 먼저 호출하세요.');
+      throw StateError(
+        'CourseProvider: coupleId가 설정되지 않았습니다. initForCouple()를 먼저 호출하세요.',
+      );
     }
   }
 
@@ -132,10 +207,11 @@ class CourseProvider extends ChangeNotifier {
           .select('schedules')
           .eq('couple_id', _currentCoupleId!)
           .maybeSingle();
-      print('[DEBUG] couples.schedules 응답: $res');
+      debugPrint('[DEBUG] couples.schedules 응답: $res');
       if (res == null) {
         _courseIds = [];
         _coursesById.clear();
+        _diariesByCourseId.clear();
         _isLoading = false;
         notifyListeners();
         return;
@@ -145,6 +221,7 @@ class CourseProvider extends ChangeNotifier {
       _courseIds = raw.cast<String>();
 
       await _loadCoursesForIds(_courseIds);
+      await _loadDiariesForIds(_courseIds);
 
       _isLoading = false;
       notifyListeners();
@@ -163,13 +240,13 @@ class CourseProvider extends ChangeNotifier {
     }
 
     final rows = await supabase
-    .from('courses')
-    .select(
-      'course_id, couple_id, date, template, start_time, end_time, '
-      'total_distance, total_duration, slots',
-    )
-    .filter('course_id', 'in', ids);
-    print('[DEBUG] Supabase courses fetch rows: $rows');
+        .from('courses')
+        .select(
+          'course_id, couple_id, date, template, start_time, end_time, '
+          'total_distance, total_duration, slots',
+        )
+        .filter('course_id', 'in', ids);
+    debugPrint('[DEBUG] Supabase courses fetch rows: $rows');
     _coursesById.clear();
 
     for (final row in rows as List) {
@@ -193,15 +270,48 @@ class CourseProvider extends ChangeNotifier {
         'total_duration': base['total_duration'],
         'slots': base['slots'] ?? [],
       };
-      print('[DEBUG] courseJson: $courseJson');
+      debugPrint('[DEBUG] courseJson: $courseJson');
       try {
         final dc = DateCourse.fromJson(courseJson);
         if (dc.id != null) {
           _coursesById[dc.id!] = dc;
         }
       } catch (e, stackTrace) {
-        debugPrint('[CourseProvider] 코스 파싱 실패: $e');
+        debugPrint('[CourseProvider] 코스 파싱 실패: $e\n$stackTrace');
       }
+    }
+  }
+
+  /// diary 테이블에서 여러 course_id의 일기 로딩
+  Future<void> _loadDiariesForIds(List<String> ids) async {
+    if (ids.isEmpty) {
+      _diariesByCourseId.clear();
+      return;
+    }
+
+    final rows =
+        await supabase.from('diary').select('course_id, json').filter(
+              'course_id',
+              'in',
+              ids,
+            );
+
+    debugPrint('[DEBUG] Supabase diary fetch rows: $rows');
+
+    _diariesByCourseId.clear();
+
+    for (final row in rows as List) {
+      final base = row as Map<String, dynamic>;
+      final courseId = base['course_id'] as String;
+      final json = base['json'] as Map<String, dynamic>?;
+
+      if (json == null) continue;
+
+      final slots = (json['slots'] as List<dynamic>? ?? [])
+          .map((e) => DiarySlotEntry.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      _diariesByCourseId[courseId] = slots;
     }
   }
 
@@ -238,9 +348,10 @@ class CourseProvider extends ChangeNotifier {
               debugPrint('[REALTIME] 새로 들어온 newIds → $newIds');
 
               if (!listEquals(_courseIds, newIds)) {
-                debugPrint('[REALTIME] 값 변경됨 → courses 다시 로드');
+                debugPrint('[REALTIME] 값 변경됨 → courses + diary 다시 로드');
                 _courseIds = newIds;
                 await _loadCoursesForIds(_courseIds);
+                await _loadDiariesForIds(_courseIds);
                 notifyListeners();
               } else {
                 debugPrint('[REALTIME] ⚠ 값 동일 → 업데이트 없이 종료');
@@ -254,7 +365,7 @@ class CourseProvider extends ChangeNotifier {
   }
 
   // =====================
-  // CRUD (Supabase 직접 호출)
+  // 코스 CRUD
   // =====================
 
   /// 코스 생성 (슬롯 포함 전체)
@@ -281,15 +392,16 @@ class CourseProvider extends ChangeNotifier {
         'slots': course.slots.map((s) => s.toJson()).toList(),
       };
 
-      final inserted = await supabase
-          .from('courses')
-          .insert(row)
-          .select()
-          .single();
+      final inserted =
+          await supabase.from('courses').insert(row).select().single();
+
+      String normalizedDate = inserted['date'];
+      if (normalizedDate.contains('T')) {
+        normalizedDate = normalizedDate.split('T').first;
+      }
 
       // couples.schedules 배열에 추가
       final updatedIds = [..._courseIds, newId];
-      // _courseIds = updatedIds; // 미리 반영 (realtime payload와 맞추기)
 
       await supabase
           .from('couples')
@@ -299,7 +411,7 @@ class CourseProvider extends ChangeNotifier {
       // Supabase에서 돌아온 row를 다시 DateCourse로
       final insertedJson = {
         'course_id': inserted['course_id'],
-        'date': inserted['date'],
+        'date': normalizedDate,
         'template': inserted['template'],
         'start_time': inserted['start_time'],
         'end_time': inserted['end_time'],
@@ -311,6 +423,7 @@ class CourseProvider extends ChangeNotifier {
       final created = DateCourse.fromJson(insertedJson);
 
       _coursesById[newId] = created;
+      _courseIds = updatedIds;
       notifyListeners();
 
       return created;
@@ -350,9 +463,14 @@ class CourseProvider extends ChangeNotifier {
           .select()
           .single();
 
+      String normalizedDate = updated['date'];
+      if (normalizedDate.contains('T')) {
+        normalizedDate = normalizedDate.split('T').first;
+      }
+
       final updatedJson = {
         'course_id': updated['course_id'],
-        'date': updated['date'],
+        'date': normalizedDate,
         'template': updated['template'],
         'start_time': updated['start_time'],
         'end_time': updated['end_time'],
@@ -383,11 +501,13 @@ class CourseProvider extends ChangeNotifier {
     try {
       final id = course.id!;
 
-      await supabase
-          .from('courses')
-          .delete()
-          .eq('course_id', id);
+      // 코스 삭제
+      await supabase.from('courses').delete().eq('course_id', id);
 
+      // 이 코스에 연결된 일기도 같이 삭제
+      await deleteDiaryForCourse(id);
+
+      // couples.schedules 갱신
       final updatedIds = _courseIds.where((c) => c != id).toList();
       _courseIds = updatedIds;
 
@@ -397,6 +517,7 @@ class CourseProvider extends ChangeNotifier {
           .eq('couple_id', _currentCoupleId!);
 
       _coursesById.remove(id);
+      // _diariesByCourseId.remove(id);  // deleteDiaryForCourse에서 이미 처리
       notifyListeners();
     } catch (e, st) {
       debugPrint('[CourseProvider] deleteCourse 실패: $e\n$st');
@@ -404,6 +525,63 @@ class CourseProvider extends ChangeNotifier {
       notifyListeners();
       rethrow;
     }
+  }
+
+  // =====================
+  // Diary CRUD + 사진 업로드
+  // =====================
+
+  /// Supabase Storage에 일기용 사진 업로드
+  /// bucket 이름은 'diary'라고 가정
+  Future<String?> uploadDiaryImage({
+    required String courseId,
+    required int slotIndex,
+    required File file,
+  }) async {
+    _ensureCouple();
+
+    final ext = file.path.split('.').last;
+    final path = 'diary/${_currentCoupleId}/$courseId/slot_$slotIndex.$ext';
+
+    await supabase.storage
+        .from('diary')
+        .upload(path, file, fileOptions: const FileOptions(upsert: true));
+
+    final url = supabase.storage.from('diary').getPublicUrl(path);
+    return url;
+  }
+
+  /// 한 코스에 대한 diary upsert (슬롯 리스트 전체)
+  Future<void> upsertDiaryForCourse({
+    required DateCourse course,
+    required List<DiarySlotEntry> slots,
+  }) async {
+    _ensureCouple();
+    if (course.id == null) {
+      throw Exception('Diary 저장 실패: course.id가 없습니다.');
+    }
+
+    final courseId = course.id!;
+    final jsonMap = {
+      'slots': slots.map((e) => e.toJson()).toList(),
+    };
+
+    await supabase.from('diary').upsert({
+      'course_id': courseId,
+      'couple_id': _currentCoupleId,
+      'template': course.template,
+      'json': jsonMap,
+    });
+
+    _diariesByCourseId[courseId] = slots;
+    notifyListeners();
+  }
+
+  /// 한 코스의 diary 삭제
+  Future<void> deleteDiaryForCourse(String courseId) async {
+    await supabase.from('diary').delete().eq('course_id', courseId);
+    _diariesByCourseId.remove(courseId);
+    notifyListeners();
   }
 
   // =====================

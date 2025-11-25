@@ -742,24 +742,20 @@ class _DateCourseDisplayState extends State<_DateCourseDisplay> {
         await chatProvider.sendUserMessage(message);
       },
       onAddToSchedule: () async {
-        final scheduleProvider = context.read<CourseProvider>();
+        final courseProvider = context.read<CourseProvider>();
         final mapProvider = context.read<MapProvider>();
         final navigationProvider = context.read<NavigationProvider>();
 
         try {
-          // 코스의 날짜 파싱 (YYYY-MM-DD 형식)
-          final date = DateTime.parse(widget.course.date);
+          // 1) 날짜 문자열 normalize (ISO 형식 or 'yyyy-mm-ddT...' 둘 다 대응)
+          final rawDate = widget.course.date;
+          final dateString = rawDate.contains('T')
+              ? rawDate.split('T').first
+              : rawDate;
 
-          // 각 슬롯을 일정으로 추가
-          final courseProvider = context.read<CourseProvider>();
-
-          // date 가 DateTime이라면, 백엔드에서 요구하는 포맷에 맞게 문자열로 변환
-          // 예: 'YYYY-MM-DD'
-          final dateString =
-              '${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-
+          // 2) 실제 DB에 넣을 새 코스 객체 구성 (id는 null → createCourse가 새 id 부여)
           final newCourse = DateCourse(
-            id: null, // 새 코스 생성이니까 null
+            id: null,
             date: dateString,
             template: widget.course.template,
             startTime: widget.course.startTime,
@@ -769,23 +765,25 @@ class _DateCourseDisplayState extends State<_DateCourseDisplay> {
             slots: widget.course.slots,
           );
 
-          await courseProvider.createCourse(newCourse);
+          // 3) Supabase courses INSERT + couples.schedules 갱신
+          final created = await courseProvider.createCourse(newCourse);
 
-          // 지도에 코스 경로 표시
-          mapProvider.setCourseRoute(widget.course);
-          debugPrint('✅ 데이트 코스를 지도에 표시했습니다');
-
-          // 지도 탭으로 이동
+          // 4) 지도에 경로 표시 + 지도 탭으로 이동
+          mapProvider.setCourseRoute(created);
           navigationProvider.setIndex(1);
 
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ ${widget.course.slots.length}개 일정이 추가되었습니다!'),
+              content: Text(
+                '✅ ${created.slots.length}개 일정이 캘린더에 추가되었습니다!',
+              ),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 2),
             ),
           );
         } catch (e) {
+          if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('❌ 일정 추가 실패: $e'),
