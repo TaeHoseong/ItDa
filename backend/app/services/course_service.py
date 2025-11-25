@@ -24,36 +24,36 @@ class CourseService:
     # 템플릿 정의
     TEMPLATES = {
         "full_day": [
-            {"slot_type": "lunch", "category": "food_cafe", "start_time": "12:00", "duration": 90, "emoji": "🍽️"},
-            {"slot_type": "cafe", "category": "food_cafe", "start_time": "14:00", "duration": 60, "emoji": "☕"},
+            {"slot_type": "lunch", "category": "food", "start_time": "12:00", "duration": 90, "emoji": "🍽️"},
+            {"slot_type": "cafe", "category": "cafe", "start_time": "14:00", "duration": 60, "emoji": "☕"},
             {"slot_type": "activity", "category": "activity_sports", "start_time": "15:30", "duration": 120, "emoji": "⚽"},
-            {"slot_type": "dinner", "category": "food_cafe", "start_time": "18:00", "duration": 90, "emoji": "🍴"},
+            {"slot_type": "dinner", "category": "food", "start_time": "18:00", "duration": 90, "emoji": "🍴"},
             {"slot_type": "night_view", "category": "nature_healing", "start_time": "20:00", "duration": 60, "emoji": "🌃"},
         ],
         "half_day_lunch": [
-            {"slot_type": "lunch", "category": "food_cafe", "start_time": "12:00", "duration": 90, "emoji": "🍽️"},
-            {"slot_type": "cafe", "category": "food_cafe", "start_time": "14:00", "duration": 60, "emoji": "☕"},
+            {"slot_type": "lunch", "category": "food", "start_time": "12:00", "duration": 90, "emoji": "🍽️"},
+            {"slot_type": "cafe", "category": "cafe", "start_time": "14:00", "duration": 60, "emoji": "☕"},
             {"slot_type": "activity", "category": "culture_art", "start_time": "15:30", "duration": 120, "emoji": "🎨"},
         ],
         "half_day_dinner": [
-            {"slot_type": "cafe", "category": "food_cafe", "start_time": "16:00", "duration": 60, "emoji": "☕"},
-            {"slot_type": "dinner", "category": "food_cafe", "start_time": "18:00", "duration": 90, "emoji": "🍴"},
+            {"slot_type": "cafe", "category": "cafe", "start_time": "16:00", "duration": 60, "emoji": "☕"},
+            {"slot_type": "dinner", "category": "food", "start_time": "18:00", "duration": 90, "emoji": "🍴"},
             {"slot_type": "night_view", "category": "nature_healing", "start_time": "20:00", "duration": 60, "emoji": "🌃"},
         ],
         "cafe_date": [
-            {"slot_type": "cafe", "category": "food_cafe", "start_time": "14:00", "duration": 90, "emoji": "☕"},
-            {"slot_type": "dessert", "category": "food_cafe", "start_time": "16:00", "duration": 60, "emoji": "🍰"},
+            {"slot_type": "cafe", "category": "cafe", "start_time": "14:00", "duration": 90, "emoji": "☕"},
+            {"slot_type": "dessert", "category": "cafe", "start_time": "16:00", "duration": 60, "emoji": "🍰"},
             {"slot_type": "walk", "category": "nature_healing", "start_time": "17:30", "duration": 60, "emoji": "🚶"},
         ],
         "active_date": [
-            {"slot_type": "lunch", "category": "food_cafe", "start_time": "12:00", "duration": 60, "emoji": "🍽️"},
+            {"slot_type": "lunch", "category": "food", "start_time": "12:00", "duration": 60, "emoji": "🍽️"},
             {"slot_type": "activity", "category": "activity_sports", "start_time": "13:30", "duration": 150, "emoji": "⚽"},
-            {"slot_type": "cafe", "category": "food_cafe", "start_time": "16:30", "duration": 60, "emoji": "☕"},
+            {"slot_type": "cafe", "category": "cafe", "start_time": "16:30", "duration": 60, "emoji": "☕"},
         ],
         "culture_date": [
-            {"slot_type": "lunch", "category": "food_cafe", "start_time": "12:00", "duration": 90, "emoji": "🍽️"},
+            {"slot_type": "lunch", "category": "food", "start_time": "12:00", "duration": 90, "emoji": "🍽️"},
             {"slot_type": "exhibition", "category": "culture_art", "start_time": "14:00", "duration": 120, "emoji": "🎨"},
-            {"slot_type": "cafe", "category": "food_cafe", "start_time": "16:30", "duration": 60, "emoji": "☕"},
+            {"slot_type": "cafe", "category": "cafe", "start_time": "16:30", "duration": 60, "emoji": "☕"},
         ],
     }
 
@@ -489,16 +489,16 @@ class CourseService:
     def _infer_category_from_slot_type(self, slot_type: str) -> str:
         """슬롯 타입으로부터 카테고리 추론"""
         mapping = {
-            "lunch": "food_cafe",
-            "dinner": "food_cafe",
-            "cafe": "food_cafe",
-            "dessert": "food_cafe",
+            "lunch": "food",
+            "dinner": "food",
+            "cafe": "cafe",
+            "dessert": "cafe",
             "activity": "activity_sports",
             "walk": "nature_healing",
             "night_view": "nature_healing",
             "exhibition": "culture_art",
         }
-        return mapping.get(slot_type, "food_cafe")
+        return mapping.get(slot_type, "food")
 
     # ========== CRUD Methods ==========
 

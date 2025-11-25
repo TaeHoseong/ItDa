@@ -24,9 +24,11 @@ persona_position = [37.382556, 126.671083]
 def extract_features(place: json, persona):
     try:
         features = place["placeFeatures"]
-
+        mainCategory = list(features["mainCategory"].values())
+        food_cafe = 1 if mainCategory[0] or mainCategory[1] else 0
+        mainCategory = [food_cafe] + mainCategory[2:] 
         features_array = (
-            list(features["mainCategory"].values()) +
+            mainCategory +
             list(features["atmosphere"].values()) +
             list(features["experienceType"].values()) +
             list(features["spaceCharacteristics"].values())
@@ -71,7 +73,7 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, category=
             continue
         # 필터링
         if category:
-            place_category = json.loads(scores)["placeFeatures"]["mainCategory"]
+            place_category = scores["placeFeatures"]["mainCategory"]
             if place_category[category] < 0.5: 
                 # print(f"skip {name}, {category}: {place_category[category]}")
                 continue
@@ -79,8 +81,7 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, category=
         if candidate_names and name not in candidate_names:
             # print(f"skip {name} (not in candidate names)")
             continue
-        scores_json = json.loads(scores)
-        features, rating, price  = extract_features(scores_json, persona)
+        features, rating, price  = extract_features(scores, persona)
         distance = haversine_distance(persona_position, [latitude, longitude])
         similarity_cos = cos_similarity(features, persona)
         similarity_euclid =1 / np.linalg.norm(features - persona)
