@@ -69,18 +69,21 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, category=
         if last_recommend and name in last_recommend:
             print(f"skip {name} (negative react)")
             continue
+
+        # Supabase JSONB는 이미 dict로 반환됨 (json.loads 불필요)
+        scores_dict = scores if isinstance(scores, dict) else json.loads(scores)
+
         # 필터링
         if category:
-            place_category = json.loads(scores)["placeFeatures"]["mainCategory"]
-            if place_category[category] < 0.5: 
+            place_category = scores_dict["placeFeatures"]["mainCategory"]
+            if place_category[category] < 0.5:
                 # print(f"skip {name}, {category}: {place_category[category]}")
                 continue
-        
+
         if candidate_names and name not in candidate_names:
             # print(f"skip {name} (not in candidate names)")
             continue
-        scores_json = json.loads(scores)
-        features, rating, price  = extract_features(scores_json, persona)
+        features, rating, price = extract_features(scores_dict, persona)
         distance = haversine_distance(persona_position, [latitude, longitude])
         similarity_cos = cos_similarity(features, persona)
         similarity_euclid =1 / np.linalg.norm(features - persona)
