@@ -71,13 +71,14 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, category=
         if last_recommend and name in last_recommend:
             print(f"skip {name} (negative react)")
             continue
+
         # 필터링
         if category:
             place_category = scores["placeFeatures"]["mainCategory"]
             if place_category[category] < 0.5: 
                 # print(f"skip {name}, {category}: {place_category[category]}")
                 continue
-        
+
         if candidate_names and name not in candidate_names:
             # print(f"skip {name} (not in candidate names)")
             continue

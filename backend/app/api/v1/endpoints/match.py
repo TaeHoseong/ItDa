@@ -13,6 +13,25 @@ from app.schemas.match import MatchCodeResponse, MatchConnectRequest, MatchConne
 
 router = APIRouter()
 
+# features 딕셔너리 → 20차원 리스트 변환을 위한 키 순서
+FEATURES_ORDER = [
+    # Main Category (6)
+    "food_cafe", "culture_art", "activity_sports", "nature_healing", "craft_experience", "shopping",
+    # Atmosphere (6)
+    "quiet", "romantic", "trendy", "private_vibe", "artistic", "energetic",
+    # Experience Type (4)
+    "passive_enjoyment", "active_participation", "social_bonding", "relaxation_focused",
+    # Space Characteristics (4)
+    "indoor_ratio", "crowdedness_expected", "photo_worthiness", "scenic_view",
+]
+
+
+def features_dict_to_list(features: dict) -> list:
+    """딕셔너리 형태의 features를 20차원 리스트로 변환"""
+    if not features or not isinstance(features, dict):
+        return []
+    return [features.get(key, 0.0) for key in FEATURES_ORDER]
+
 
 def generate_match_code() -> str:
     """6자리 랜덤 코드 생성 (대문자 + 숫자)"""
@@ -175,8 +194,13 @@ async def connect_with_code(
         # 7. 커플 페르소나 계산 (남성*0.3 + 여성*0.7)
         user1_gender = current_user.get("gender")
         user2_gender = partner.get("gender")
-        user1_features = current_user.get("features", [])
-        user2_features = partner.get("features", [])
+
+        # 딕셔너리 형태의 features를 리스트로 변환
+        user1_features_raw = current_user.get("features")
+        user2_features_raw = partner.get("features")
+
+        user1_features = features_dict_to_list(user1_features_raw) if isinstance(user1_features_raw, dict) else (user1_features_raw or [])
+        user2_features = features_dict_to_list(user2_features_raw) if isinstance(user2_features_raw, dict) else (user2_features_raw or [])
 
         couple_features = None
         if (user1_gender and user2_gender and
