@@ -32,6 +32,7 @@ class SuggestService:
     def get_user_persona(self, user_id: str) -> Optional[List[float]]:
         """
         DB에서 사용자 페르소나를 가져옴
+        커플이 있으면 커플 페르소나를 우선 사용
 
         Args:
             user_id: User's unique identifier (Google ID)
@@ -49,12 +50,22 @@ class SuggestService:
 
         if not user.data:
             return None
-        
-        data = user.data["features"]
 
-        if not data.get("survey_done"):
+        # 커플이 있으면 커플 페르소나 우선 사용
+        couple_id = user.data.get("couple_id")
+        if couple_id:
+            couple_persona = self.get_couple_persona(couple_id)
+            if couple_persona:
+                print(f"[PERSONA] Using COUPLE persona (used_id: {couple_id})")
+                return couple_persona
+
+        # 개인 페르소나 사용
+        data = user.data.get("features")
+
+        if not data or not user.data.get("survey_done"):
             return None
-        
+
+        print(f"[PERSONA] Using INDIVIDUAL persona (used_id: {user_id})")
         return [
             data["food_cafe"], data["culture_art"], data["activity_sports"],
             data["nature_healing"], data["craft_experience"], data["shopping"],
@@ -65,6 +76,35 @@ class SuggestService:
             data["indoor_ratio"], data["crowdedness_expected"],
             data["photo_worthiness"], data["scenic_view"]
         ]
+
+    def get_couple_persona(self, couple_id: str) -> Optional[List[float]]:
+        """
+        DB에서 커플 페르소나를 가져옴
+
+        Args:
+            couple_id: Couple's unique identifier
+
+        Returns:
+            20차원 커플 페르소나 벡터 or None
+        """
+        couple = (
+            self.supabase.table("couples")
+            .select("features")
+            .eq("couple_id", couple_id)
+            .single()
+            .execute()
+        )
+
+        if not couple.data:
+            return None
+
+        features = couple.data.get("features")
+
+        # features가 이미 리스트(배열) 형태로 저장되어 있음
+        if features and isinstance(features, list) and len(features) == 20:
+            return features
+
+        return None
         
     def get_candidate_places(self, specific_food):
         import time
@@ -125,7 +165,7 @@ class SuggestService:
             if user_id:
                 persona = self.get_user_persona(user_id)
                 if persona:
-                    persona_source = f"DB 조회 (user_id: {user_id})"
+                    persona_source = "DB 조회 (위 로그 참조)"
             if persona is None:
                 persona = self.default_persona
                 persona_source = "기본값 (default)"
@@ -154,6 +194,7 @@ class SuggestService:
             candidates = self.get_candidate_places(specific_food)
 
         # algorithm.py의 recommend_topk() 호출 (수정 없이 사용)
+        results = []
         try:
             results = algorithm.recommend_topk(
                 persona=persona,
@@ -167,7 +208,9 @@ class SuggestService:
                 delta=delta
             )
         except Exception as e:
-            print(e)
+            print(f"[ERROR] algorithm.recommend_topk failed: {e}")
+            import traceback
+            traceback.print_exc()
 
         # results는 [(name, score), ...] 형태
         # DB에서 상세 정보를 가져와서 병합
