@@ -41,9 +41,11 @@ def get_system_prompt():
 ### 카테고리 추출 규칙
 사용자의 메시지에 아래 키워드가 포함되면 category를 다음 값으로 설정한다.
 
-- food_cafe:
-  ["카페", "카페 추천", "맛집", "밥집", "레스토랑", "식당", "한식", "중식", "일식",
-   "파스타", "버거", "이탈리안", "카레", "초밥", "라멘", "브런치", "디저트"]
+- food:
+  ["맛집", "밥집", "레스토랑", "식당", "한식", "중식", "일식",
+   "파스타", "버거", "이탈리안", "카레", "초밥", "라멘"]
+- cafe:
+  ["카페", "카페 추천", "브런치", "디저트"]
 - culture_art:
   ["전시", "뮤지엄", "미술관", "공연", "연극", "아트", "갤러리"]
 - activity_sports:
@@ -57,7 +59,7 @@ def get_system_prompt():
 
 메시지에 여러 키워드가 있어도 가장 명확한 하나만 할당한다.
 food와 category는 둘 다 추출할 수 있다.
-예: "파스타 맛집 추천해줘" → category: food_cafe, food: "파스타"
+예: "파스타 맛집 추천해줘" → category: food, food: "파스타"
 
 - 음식: 음식 관련된 키워드 "파스타 맛집 추천해줘"→"파스타"
 ### 음식 키워드 추출 규칙
@@ -75,7 +77,7 @@ food와 category는 둘 다 추출할 수 있다.
     "title": "일정 제목 또는 null",
     "date": "YYYY-MM-DD 또는 null",
     "time": "HH:MM 또는 null",
-    "category": "(food_cafe, culture_art, activity_sports, nature_healing, craft_experience, shoping) 중 하나"
+    "category": "(food, cafe, culture_art, activity_sports, nature_healing, craft_experience, shoping) 중 하나"
     "food": "유저가 원하는 음식",
     "old_value": "수정시 기존값",
     "new_value": "수정시 새값",
@@ -101,7 +103,7 @@ food와 category는 둘 다 추출할 수 있다.
 "이번 주 일정" → view_schedule (timeframe: this_week)
 "내일 데이트 코스 추천해줘" → generate_course (date: 내일, template: auto)
 "1번 슬롯 다른 장소로" → regenerate_course_slot (slot_index: 1)
-"1번 슬롯 파스타맛집으로" -> regenerate_course_slot (slot_index:1, category: "food_cafe", keyword: 파스타맛집)
+"1번 슬롯 파스타맛집으로" -> regenerate_course_slot (slot_index:1, category: "food", keyword: 파스타맛집)
 "카페 다른 곳으로" → regenerate_course_slot (slot_index를 카페 슬롯 번호로 추출)
 "카페 위주 반나절 코스" → generate_course (template: cafe_date)
 "하루 데이트 코스 짜줘" → generate_course (template: auto)

@@ -9,7 +9,7 @@ from datetime import datetime, time
 class SlotConfig(BaseModel):
     """슬롯 설정"""
     slot_type: str  # lunch, cafe, activity, dinner, night_view
-    category: str  # food_cafe, activity_sports, culture_art, etc.
+    category: str  # food, cafe, activity_sports, culture_art, etc.
     start_time: str  # "12:00"
     duration: int  # 분 단위 (90분)
     emoji: str  # "🍽️"
@@ -76,7 +76,7 @@ class DateCourse(BaseModel):
                 "slots": [
                     {
                         "slot_type": "lunch",
-                        "category": "food_cafe",
+                        "category": "food",
                         "start_time": "12:00",
                         "duration": 90,
                         "emoji": "🍽️",
@@ -119,7 +119,7 @@ class CourseCreate(BaseModel):
                 "slots": [
                     {
                         "slot_type": "cafe",
-                        "category": "food_cafe",
+                        "category": "cafe",
                         "start_time": "14:00",
                         "duration": 90,
                         "emoji": "☕",

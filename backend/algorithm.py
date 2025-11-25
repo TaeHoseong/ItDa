@@ -24,9 +24,11 @@ persona_position = [37.382556, 126.671083]
 def extract_features(place: json, persona):
     try:
         features = place["placeFeatures"]
-
+        mainCategory = list(features["mainCategory"].values())
+        food_cafe = 1 if mainCategory[0] or mainCategory[1] else 0
+        mainCategory = [food_cafe] + mainCategory[2:] 
         features_array = (
-            list(features["mainCategory"].values()) +
+            mainCategory +
             list(features["atmosphere"].values()) +
             list(features["experienceType"].values()) +
             list(features["spaceCharacteristics"].values())
@@ -70,20 +72,17 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, category=
             print(f"skip {name} (negative react)")
             continue
 
-        # Supabase JSONB는 이미 dict로 반환됨 (json.loads 불필요)
-        scores_dict = scores if isinstance(scores, dict) else json.loads(scores)
-
         # 필터링
         if category:
-            place_category = scores_dict["placeFeatures"]["mainCategory"]
-            if place_category[category] < 0.5:
+            place_category = scores["placeFeatures"]["mainCategory"]
+            if place_category[category] < 0.5: 
                 # print(f"skip {name}, {category}: {place_category[category]}")
                 continue
 
         if candidate_names and name not in candidate_names:
             # print(f"skip {name} (not in candidate names)")
             continue
-        features, rating, price = extract_features(scores_dict, persona)
+        features, rating, price  = extract_features(scores, persona)
         distance = haversine_distance(persona_position, [latitude, longitude])
         similarity_cos = cos_similarity(features, persona)
         similarity_euclid =1 / np.linalg.norm(features - persona)
