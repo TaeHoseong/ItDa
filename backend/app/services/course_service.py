@@ -274,7 +274,8 @@ class CourseService:
         user_id: str,
         slot_config: Dict,
         previous_location: Optional[Tuple[float, float]] = None,
-        exclude_places: Optional[List[str]] = None
+        exclude_places: Optional[List[str]] = None,
+        keyword: str = None
     ) -> Optional[CourseSlot]:
         """
         특정 슬롯에 대한 장소 추천
@@ -284,7 +285,8 @@ class CourseService:
             slot_config: 슬롯 설정
             previous_location: 이전 장소 위치 (lat, lng)
             exclude_places: 제외할 장소 이름 리스트 (중복 방지)
-
+            keyword: 유저가 원하는 특정한 장소
+            
         Returns:
             CourseSlot: 추천된 슬롯 (장소 포함)
         """
@@ -302,6 +304,7 @@ class CourseService:
                 places = self.suggest_service.get_recommendations(
                     user_id=user_id,
                     category=category,
+                    specific_food=keyword,
                     last_recommend=exclude_places,  # 이미 사용된 장소 제외
                     k=k
                 )
@@ -387,7 +390,9 @@ class CourseService:
         self,
         course: DateCourse,
         slot_index: int,
-        user_id: str = None
+        user_id: str = None,
+        category: str = None,
+        keyword: str = None
     ) -> DateCourse:
         """
         코스의 특정 슬롯만 재생성
@@ -396,10 +401,12 @@ class CourseService:
             course: 기존 데이트 코스
             slot_index: 재생성할 슬롯 인덱스 (0부터 시작)
             user_id: 사용자 ID (페르소나 기반 추천용)
-
+            keyword: 유저가 원하는 특정 장소
+            
         Returns:
             DateCourse: 슬롯이 교체된 새로운 코스
         """
+        
         if slot_index < 0 or slot_index >= len(course.slots):
             raise ValueError(f"Invalid slot_index: {slot_index}")
 
@@ -409,11 +416,11 @@ class CourseService:
 
         # 기존 슬롯 정보
         old_slot = course.slots[slot_index]
-
+        new_category = old_slot.category if old_slot.category == category else category
         # 슬롯 설정 재구성
         slot_config = {
             "slot_type": old_slot.slot_type,
-            "category": old_slot.category,  # 기존 슬롯의 category 사용
+            "category": new_category,  # 기존 슬롯의 category 사용
             "start_time": old_slot.start_time,
             "duration": old_slot.duration,
             "emoji": old_slot.emoji,
@@ -422,7 +429,7 @@ class CourseService:
         # 이미 사용된 장소들 (현재 슬롯 포함 - 같은 장소가 다시 나오지 않도록)
         exclude_places = [s.place_name for s in course.slots]
         print(f"   Excluding ALL current places: {exclude_places}")
-
+        print(f"[slot change] {slot_config["category"]} >> {new_category}")
         # 이전 위치 (이전 슬롯이 있으면)
         previous_location = None
         if slot_index > 0:
@@ -434,7 +441,8 @@ class CourseService:
             user_id=user_id,
             slot_config=slot_config,
             previous_location=previous_location,
-            exclude_places=exclude_places
+            exclude_places=exclude_places,
+            keyword=keyword
         )
 
         if not new_slot:
