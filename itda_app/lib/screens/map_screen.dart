@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../services/directions_service.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -17,7 +18,17 @@ class _MapScreenState extends State<MapScreen> {
   List<String> _currentMarkerIds = [];
   bool _isSyncing = false;
   bool _isProgrammaticMove = false;
-  NPolylineOverlay? _coursePolyline;
+  List<NPolylineOverlay> _coursePolylines = [];  // 구간별 폴리라인
+  int _currentRouteHash = 0;  // 경로 변경 감지용
+
+  // 구간별 색상 (핑크 계열 그라데이션)
+  static const List<Color> _segmentColors = [
+    Color(0xFFFF6B9D),  // 핑크
+    Color(0xFFE91E63),  // 진한 핑크
+    Color(0xFFFF4081),  // 밝은 핑크
+    Color(0xFFF50057),  // 레드 핑크
+    Color(0xFFFF80AB),  // 연한 핑크
+  ];
 
   // ========= 마커 관련 =========
 
@@ -50,34 +61,58 @@ class _MapScreenState extends State<MapScreen> {
 
   // ========= 코스 폴리라인 =========
 
-  /// 코스 경로 폴리라인 추가
-  Future<void> _addCoursePolyline(
+  /// 구간별 코스 경로 폴리라인 추가
+  Future<void> _addCoursePolylines(
     NaverMapController controller,
-    List<NLatLng> route,
+    List<List<NLatLng>>? segments,
+    List<NLatLng>? fallbackRoute,
   ) async {
     try {
-      final polyline = NPolylineOverlay(
-        id: 'course_route',
-        coords: route,
-        color: const Color(0xFFFF6B9D),
-        width: 5,
-      );
+      _coursePolylines.clear();
 
-      await controller.addOverlay(polyline);
-      _coursePolyline = polyline;
-      debugPrint('🗺️ 코스 경로 폴리라인 추가 완료 (${route.length}개 지점)');
+      if (segments != null && segments.isNotEmpty) {
+        // 구간별로 다른 색상의 폴리라인 추가
+        for (int i = 0; i < segments.length; i++) {
+          final segment = segments[i];
+          if (segment.isEmpty) continue;
+
+          final color = _segmentColors[i % _segmentColors.length];
+          final polyline = NPolylineOverlay(
+            id: 'course_segment_$i',
+            coords: segment,
+            color: color,
+            width: 5,
+          );
+
+          await controller.addOverlay(polyline);
+          _coursePolylines.add(polyline);
+        }
+        debugPrint('🗺️ 구간별 폴리라인 추가 완료 (${segments.length}개 구간)');
+      } else if (fallbackRoute != null && fallbackRoute.isNotEmpty) {
+        // fallback: 단일 폴리라인
+        final polyline = NPolylineOverlay(
+          id: 'course_route',
+          coords: fallbackRoute,
+          color: const Color(0xFFFF6B9D),
+          width: 5,
+        );
+
+        await controller.addOverlay(polyline);
+        _coursePolylines.add(polyline);
+        debugPrint('🗺️ 단일 폴리라인 추가 완료 (${fallbackRoute.length}개 지점)');
+      }
     } catch (e) {
       debugPrint('❌ 폴리라인 추가 오류: $e');
     }
   }
 
   /// 코스 경로 폴리라인 제거
-  Future<void> _removeCoursePolyline(NaverMapController controller) async {
-    if (_coursePolyline != null) {
-      await controller.deleteOverlay(_coursePolyline!.info);
-      _coursePolyline = null;
-      debugPrint('🗺️ 코스 경로 폴리라인 제거 완료');
+  Future<void> _removeCoursePolylines(NaverMapController controller) async {
+    for (final polyline in _coursePolylines) {
+      await controller.deleteOverlay(polyline.info);
     }
+    _coursePolylines.clear();
+    debugPrint('🗺️ 코스 경로 폴리라인 제거 완료');
   }
 
   // ========= 카메라 이동 =========
@@ -130,10 +165,20 @@ class _MapScreenState extends State<MapScreen> {
       // 2) 선택된 코스 상태에 맞춰 마커/폴리라인 동기화
       final newMarkerIds = mapProvider.markers.map((m) => m.id).toList();
 
+      // 경로 좌표 변경 감지 (경로 타입 변경 시 폴리라인 다시 그리기)
+      // 경로 길이 + 첫/마지막 좌표로 해시 계산
+      final route = mapProvider.courseRoute;
+      final newRouteHash = route == null || route.isEmpty
+          ? 0
+          : route.length.hashCode ^
+            route.first.latitude.hashCode ^
+            route.last.longitude.hashCode;
+
       final shouldRedrawOverlays =
           !_isSameMarkerList(_currentMarkerIds, newMarkerIds) ||
-          (mapProvider.hasCourseRoute && _coursePolyline == null) ||
-          (!mapProvider.hasCourseRoute && _coursePolyline != null);
+          (mapProvider.hasCourseRoute && _coursePolylines.isEmpty) ||
+          (!mapProvider.hasCourseRoute && _coursePolylines.isNotEmpty) ||
+          (_currentRouteHash != newRouteHash);  // 경로 변경 감지
 
       if (shouldRedrawOverlays && !_isSyncing) {
         _isSyncing = true;
@@ -146,19 +191,24 @@ class _MapScreenState extends State<MapScreen> {
 
           // 기존 오버레이 모두 제거
           await controller.clearOverlays();
-          _coursePolyline = null;
+          _coursePolylines.clear();
 
           // ✅ MapProvider.markers만 다시 그림
           if (mapProvider.markers.isNotEmpty) {
             await _addMarkersToMap(controller, mapProvider.markers);
           }
 
-          // ✅ 선택된 코스가 있을 때만 폴리라인 그림
-          if (mapProvider.hasCourseRoute && mapProvider.courseRoute != null) {
-            await _addCoursePolyline(controller, mapProvider.courseRoute!);
+          // ✅ 선택된 코스가 있을 때만 폴리라인 그림 (구간별)
+          if (mapProvider.hasCourseRoute) {
+            await _addCoursePolylines(
+              controller,
+              mapProvider.courseSegments,
+              mapProvider.courseRoute,
+            );
           }
 
           _currentMarkerIds = newMarkerIds;
+          _currentRouteHash = newRouteHash;
           _isSyncing = false;
         });
       }
@@ -189,9 +239,12 @@ class _MapScreenState extends State<MapScreen> {
                     mapProvider.markers.map((m) => m.id).toList();
               }
 
-              if (mapProvider.hasCourseRoute &&
-                  mapProvider.courseRoute != null) {
-                await _addCoursePolyline(controller, mapProvider.courseRoute!);
+              if (mapProvider.hasCourseRoute) {
+                await _addCoursePolylines(
+                  controller,
+                  mapProvider.courseSegments,
+                  mapProvider.courseRoute,
+                );
               }
             },
             onCameraIdle: () {
@@ -282,30 +335,125 @@ class _MapScreenState extends State<MapScreen> {
 
                 const SizedBox(height: 10),
 
-                // -------- 상단 아이콘/칩 + X 버튼 --------
-                Padding(
-                  padding: const EdgeInsets.only(left: 24, right: 24),
-                  child: Row(
-                    children: [
-                      const _CircleChip(icon: Icons.star_border),
-                      const SizedBox(width: 8),
-                      const _CircleChip(icon: Icons.navigation),
-                      const SizedBox(width: 8),
-                      const _ScoreChip(scoreText: '10.1'),
-                      const Spacer(),
-                      // ✅ 코스가 있을 때만 X 버튼 노출
-                      if (mapProvider.hasCourseRoute)
-                        _CircleChip(
-                          icon: Icons.close,
-                          onTap: () {
-                            // 코스 숨기기
-                            mapProvider.clearCourseRoute();
-                            // 폴리라인은 mapProvider 변경 → MapScreen에서 싱크하면서 지움
-                          },
-                        ),
-                    ],
+                // -------- 코스가 있을 때: 경로 타입 선택 + 정보 --------
+                if (mapProvider.hasCourseRoute) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          // 경로 타입 토글
+                          _RouteTypeButton(
+                            icon: Icons.directions_walk,
+                            label: '도보',
+                            isSelected: mapProvider.routeType == RouteType.walking,
+                            onTap: () => mapProvider.setRouteType(RouteType.walking),
+                          ),
+                          const SizedBox(width: 6),
+                          _RouteTypeButton(
+                            icon: Icons.directions_car,
+                            label: '자동차',
+                            isSelected: mapProvider.routeType == RouteType.driving,
+                            onTap: () => mapProvider.setRouteType(RouteType.driving),
+                          ),
+                          const SizedBox(width: 6),
+                          _RouteTypeButton(
+                            icon: Icons.directions_transit,
+                            label: '대중교통',
+                            isSelected: mapProvider.routeType == RouteType.transit,
+                            onTap: () => mapProvider.setRouteType(RouteType.transit),
+                          ),
+                          const Spacer(),
+                          // 로딩 또는 경로 정보
+                          if (mapProvider.isLoadingRoute)
+                            const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFFFF6B9D),
+                              ),
+                            )
+                          else if (mapProvider.routeSummary != null) ...[
+                            Icon(
+                              Icons.route,
+                              size: 16,
+                              color: Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              mapProvider.routeSummary!.distanceText,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              Icons.access_time,
+                              size: 16,
+                              color: Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              mapProvider.routeSummary!.durationText,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(width: 8),
+                          // X 버튼
+                          GestureDetector(
+                            onTap: () => mapProvider.clearCourseRoute(),
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.close,
+                                size: 16,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                ] else ...[
+                  // -------- 기본 상단 아이콘/칩 --------
+                  Padding(
+                    padding: const EdgeInsets.only(left: 24, right: 24),
+                    child: Row(
+                      children: [
+                        const _CircleChip(icon: Icons.star_border),
+                        const SizedBox(width: 8),
+                        const _CircleChip(icon: Icons.navigation),
+                        const SizedBox(width: 8),
+                        const _ScoreChip(scoreText: '10.1'),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -391,6 +539,53 @@ class _ScoreChip extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RouteTypeButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _RouteTypeButton({
+    required this.icon,
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFFF6B9D) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected ? Colors.white : Colors.grey.shade600,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: isSelected ? Colors.white : Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
