@@ -1,12 +1,17 @@
+// lib/screens/calendar_screen.dart
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:itda_app/models/date_course.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../providers/course_provider.dart';
 import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
+import 'diary_read_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -24,6 +29,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   // ===== 코스 옵션 BottomSheet =====
   void _showCourseOptions(DateTime day, DateCourse course) {
+    final courseProvider = context.read<CourseProvider>();
+    final hasDiary = course.id != null &&
+        courseProvider.getDiaryForCourse(course.id!) != null;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -80,6 +88,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   _confirmDeleteCourse(day, course);
                 },
               ),
+              if (hasDiary)
+                ListTile(
+                  leading: const Icon(
+                    Icons.delete_forever_outlined,
+                    color: Color(0xFFE53935),
+                  ),
+                  title: const Text(
+                    '일기만 삭제',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFFE53935),
+                    ),
+                  ),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _confirmDeleteDiary(course);
+                  },
+                ),
             ],
           ),
         );
@@ -92,7 +119,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final courseProvider = context.watch<CourseProvider>();
     final selectedDay = _selectedDay ?? _focusedDay;
 
-    // ✅ 여러 코스 받을 수 있도록
     final selectedCourses = courseProvider.getCoursesByDate(selectedDay);
 
     return Scaffold(
@@ -114,12 +140,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 focusedDay: _focusedDay,
                 calendarFormat: _calendarFormat,
                 startingDayOfWeek: StartingDayOfWeek.sunday,
-
-                // 🔗 코스 슬롯 연결 (여러 코스의 슬롯 합쳐서 표시)
                 eventLoader: courseProvider.getSlotsForDay,
-
                 selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-
                 onDaySelected: (selectedDay, focusedDay) {
                   if (!isSameDay(_selectedDay, selectedDay)) {
                     setState(() {
@@ -128,7 +150,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     });
                   }
                 },
-
                 onFormatChanged: (format) {
                   if (_calendarFormat != format) {
                     setState(() {
@@ -136,14 +157,10 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     });
                   }
                 },
-
                 onPageChanged: (focusedDay) {
                   _focusedDay = focusedDay;
                 },
-
                 headerVisible: true,
-
-                // 커스텀 셀 + 하트 마커
                 calendarBuilders: CalendarBuilders<CourseSlot>(
                   defaultBuilder: (context, day, focusedDay) {
                     return _buildDayCell(
@@ -212,14 +229,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 ),
               ),
 
-              // ===== 코스 리스트 (코스 단위 카드, 각 카드 안에 슬롯들) =====
+              // ===== 코스 리스트 =====
               Expanded(
                 child: ListView.builder(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   itemCount: selectedCourses.length + 1,
                   itemBuilder: (context, index) {
-                    // 맨 위: "새로운 코스 만들기"
                     if (index == 0) {
                       return GestureDetector(
                         onTap: () => _openAddCourseSheet(selectedDay),
@@ -255,6 +271,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
                     }
 
                     final course = selectedCourses[index - 1];
+                    final courseId = course.id;
+                    final hasDiary = courseId != null &&
+                        courseProvider.getDiaryForCourse(courseId) != null;
 
                     return GestureDetector(
                       onTap: () {
@@ -273,7 +292,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // 코스 헤더: 시간 범위 + 템플릿 이름 등
+                            // 코스 헤더
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
@@ -303,13 +322,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             ),
                             const SizedBox(height: 8),
 
-                            // 슬롯들 리스트
+                            // 슬롯들
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: course.slots.map((slot) {
                                 return Padding(
-                                  padding:
-                                      const EdgeInsets.only(bottom: 6.0),
+                                  padding: const EdgeInsets.only(bottom: 6.0),
                                   child: Row(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
@@ -354,55 +372,145 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
                             const SizedBox(height: 8),
 
-                            // ✅ 길 안내 버튼 (지도에 이 코스를 띄우기)
+                            // 버튼들
                             Align(
                               alignment: Alignment.centerRight,
-                              child: GestureDetector(
-                                onTap: () {
-                                  final mapProvider =
-                                      context.read<MapProvider>();
-                                  final navProvider =
-                                      context.read<NavigationProvider>();
-
-                                  // 선택한 코스를 지도에 세팅
-                                  mapProvider.setCourseRoute(course);
-
-                                  // 지도 탭으로 이동 (0: 추천, 1: 지도, 2: 달력, 3: 채팅)
-                                  navProvider.setIndex(1);
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(999),
-                                    border: Border.all(
-                                      color: const Color(0xFFFD9180),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.directions_walk,
-                                        size: 16,
-                                        color: Color(0xFFFD9180),
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        '길 안내',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFFFD9180),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (hasDiary)
+                                    GestureDetector(
+                                      onTap: () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                DiaryReadScreen(course: course),
+                                          ),
+                                        );
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 6,
+                                        ),
+                                        margin:
+                                            const EdgeInsets.only(right: 8),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          borderRadius:
+                                              BorderRadius.circular(999),
+                                          border: Border.all(
+                                            color: const Color(0xFFFD9180),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.visibility_rounded,
+                                              size: 16,
+                                              color: Color(0xFFFD9180),
+                                            ),
+                                            SizedBox(width: 4),
+                                            Text(
+                                              '일기 보기',
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFFFD9180),
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    ],
+                                    ),
+                                  GestureDetector(
+                                    onTap: () {
+                                      _openDiarySheet(selectedDay, course);
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                        border: Border.all(
+                                          color: const Color(0xFF111111),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.edit_note_rounded,
+                                            size: 16,
+                                            color: Color(0xFF111111),
+                                          ),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            '일기 쓰기',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFF111111),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () {
+                                      final mapProvider =
+                                          context.read<MapProvider>();
+                                      final navProvider =
+                                          context.read<NavigationProvider>();
+
+                                      mapProvider.setCourseRoute(course);
+                                      navProvider.setIndex(1);
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                        border: Border.all(
+                                          color: const Color(0xFFFD9180),
+                                          width: 1,
+                                        ),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.directions_walk,
+                                            size: 16,
+                                            color: Color(0xFFFD9180),
+                                          ),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            '길 안내',
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFFFD9180),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -467,6 +575,71 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 '삭제',
                 style: TextStyle(
                   color: Color(0xFFFD9180),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _confirmDeleteDiary(DateCourse course) {
+    if (course.id == null) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Text(
+            '일기 삭제',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          content: const Text(
+            '이 코스에 작성된 일기를 모두 삭제할까요?',
+            style: TextStyle(fontSize: 15),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text(
+                '취소',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                final courseProvider = context.read<CourseProvider>();
+                try {
+                  await courseProvider.deleteDiaryForCourse(course.id!);
+                  if (!mounted) return;
+                  Navigator.of(ctx).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('일기가 삭제되었습니다.'),
+                    ),
+                  );
+                } catch (_) {
+                  Navigator.of(ctx).pop();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('일기 삭제에 실패했습니다. 다시 시도해주세요.'),
+                    ),
+                  );
+                }
+              },
+              child: const Text(
+                '삭제',
+                style: TextStyle(
+                  color: Color(0xFFE53935),
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -764,6 +937,324 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
+  /// ====== 코스 일기 작성 BottomSheet ======
+  void _openDiarySheet(DateTime day, DateCourse course) {
+    final normalized = _normalize(day);
+    final courseProvider = context.read<CourseProvider>();
+
+    if (course.id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('코스 ID가 없어 일기를 저장할 수 없습니다.')),
+      );
+      return;
+    }
+
+    final existing = courseProvider.getDiaryForCourse(course.id!);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        // 기존 저장된 일기를 UI용으로 변환
+        final List<_SlotDiaryEntry> entries = List.generate(
+          course.slots.length,
+          (index) {
+            final slot = course.slots[index];
+            final e = (existing != null && index < existing.length)
+                ? existing[index]
+                : null;
+
+            return _SlotDiaryEntry(
+              imagePath: e?.imageUrl, // URL일 수도, null일 수도
+              rating: e?.rating ?? 0,
+              comment: e?.comment ?? '',
+            );
+          },
+        );
+
+        final List<TextEditingController> controllers = [
+          for (int i = 0; i < course.slots.length; i++)
+            TextEditingController(text: entries[i].comment),
+        ];
+
+        DecorationImage? buildImage(_SlotDiaryEntry entry) {
+          if (entry.imagePath == null) return null;
+          if (entry.imagePath!.startsWith('http')) {
+            return DecorationImage(
+              image: NetworkImage(entry.imagePath!),
+              fit: BoxFit.cover,
+            );
+          } else {
+            return DecorationImage(
+              image: FileImage(File(entry.imagePath!)),
+              fit: BoxFit.cover,
+            );
+          }
+        }
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            Future<void> pickImage(int index) async {
+              final picker = ImagePicker();
+              final picked =
+                  await picker.pickImage(source: ImageSource.gallery);
+
+              if (picked != null) {
+                setSheetState(() {
+                  entries[index] =
+                      entries[index].copyWith(imagePath: picked.path);
+                });
+              }
+            }
+
+            void setRating(int index, int rating) {
+              setSheetState(() {
+                entries[index] = entries[index].copyWith(rating: rating);
+              });
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 16,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 16,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '${_formatSelectedDate(normalized)} · ${course.startTime} ~ ${course.endTime}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black54,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      '데이트 일기 (장소별)',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 🔸 각 장소(slot)별 일기 UI
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: course.slots.length,
+                      separatorBuilder: (_, __) =>
+                          const SizedBox(height: 14),
+                      itemBuilder: (context, index) {
+                        final slot = course.slots[index];
+                        final entry = entries[index];
+                        final controller = controllers[index];
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${slot.emoji} ${slot.placeName}',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (slot.placeAddress != null &&
+                                slot.placeAddress!.isNotEmpty)
+                              Text(
+                                slot.placeAddress!,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            const SizedBox(height: 8),
+
+                            // 사진 + 한줄평
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                GestureDetector(
+                                  onTap: () => pickImage(index),
+                                  child: Container(
+                                    width: 70,
+                                    height: 70,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF5F5F7),
+                                      borderRadius:
+                                          BorderRadius.circular(12),
+                                      image: buildImage(entry),
+                                    ),
+                                    child: entry.imagePath == null
+                                        ? const Icon(
+                                            Icons.add_a_photo_outlined,
+                                            size: 20,
+                                            color: Colors.black54,
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: TextField(
+                                    controller: controller,
+                                    maxLines: 2,
+                                    decoration: const InputDecoration(
+                                      hintText: '이 장소에 대한 한줄평을 남겨보세요',
+                                      border: InputBorder.none,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+
+                            // 별점 ★★★★★
+                            Row(
+                              children: List.generate(5, (starIndex) {
+                                final starValue = starIndex + 1;
+                                final isFilled =
+                                    starValue <= entry.rating;
+                                return IconButton(
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  iconSize: 22,
+                                  onPressed: () =>
+                                      setRating(index, starValue),
+                                  icon: Icon(
+                                    isFilled
+                                        ? Icons.star
+                                        : Icons.star_border,
+                                    color: Colors.amber,
+                                  ),
+                                );
+                              }),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          child: const Text(
+                            '닫기',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF111111),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 18,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                          ),
+                          onPressed: () async {
+                            if (course.id == null) return;
+
+                            final List<DiarySlotEntry> slotsToSave = [];
+
+                            for (int i = 0; i < course.slots.length; i++) {
+                              final slot = course.slots[i];
+                              final localEntry = entries[i].copyWith(
+                                comment: controllers[i].text.trim(),
+                              );
+
+                              String? imageUrl;
+
+                              // 기존 diary가 있다면 그 url 유지
+                              if (existing != null &&
+                                  i < existing.length &&
+                                  existing[i].imageUrl != null) {
+                                imageUrl = existing[i].imageUrl;
+                              }
+
+                              // 로컬 파일로 새로 선택했으면 업로드
+                              if (localEntry.imagePath != null &&
+                                  !localEntry.imagePath!
+                                      .startsWith('http')) {
+                                imageUrl =
+                                    await courseProvider.uploadDiaryImage(
+                                  courseId: course.id!,
+                                  slotIndex: i,
+                                  file: File(localEntry.imagePath!),
+                                );
+                              }
+
+                              slotsToSave.add(
+                                DiarySlotEntry(
+                                  placeName: slot.placeName,
+                                  address: slot.placeAddress,
+                                  rating: localEntry.rating,
+                                  comment: localEntry.comment,
+                                  imageUrl: imageUrl,
+                                ),
+                              );
+                            }
+
+                            await courseProvider.upsertDiaryForCourse(
+                              course: course,
+                              slots: slotsToSave,
+                            );
+
+                            if (!mounted) return;
+                            Navigator.of(ctx).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content:
+                                    Text('📝 장소별 데이트 일기가 저장되었습니다'),
+                              ),
+                            );
+                          },
+                          child: const Text(
+                            '저장',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   // ===== Day 셀 =====
   Widget _buildDayCell({
     required DateTime day,
@@ -828,4 +1319,29 @@ String _formatTime(TimeOfDay t) {
   final h12 = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
   final mm = t.minute.toString().padLeft(2, '0');
   return '$period $h12:$mm';
+}
+
+// ====== 각 장소(slot)별 일기 entry (UI용, 로컬 파일 path 포함) ======
+class _SlotDiaryEntry {
+  final String? imagePath;   // 로컬 or URL
+  final int rating;          // 0~5점
+  final String comment;      // 한줄평
+
+  const _SlotDiaryEntry({
+    this.imagePath,
+    this.rating = 0,
+    this.comment = '',
+  });
+
+  _SlotDiaryEntry copyWith({
+    String? imagePath,
+    int? rating,
+    String? comment,
+  }) {
+    return _SlotDiaryEntry(
+      imagePath: imagePath ?? this.imagePath,
+      rating: rating ?? this.rating,
+      comment: comment ?? this.comment,
+    );
+  }
 }

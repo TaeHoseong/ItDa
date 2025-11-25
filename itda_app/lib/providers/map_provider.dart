@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
 import '../models/date_course.dart';
+import '../services/directions_service.dart';
 
 class MapMarker {
   final String id;
@@ -26,7 +27,13 @@ class MapProvider extends ChangeNotifier {
 
   // 데이트 코스 경로
   List<NLatLng>? _courseRoute;
+  List<List<NLatLng>>? _courseSegments;  // 구간별 경로
   List<CourseSlot>? _courseSlots;
+
+  // 경로 타입 및 상태
+  RouteType _routeType = RouteType.walking;
+  bool _isLoadingRoute = false;
+  RouteSummary? _routeSummary;
 
   bool get isInitialized => _initialized;
   NLatLng get cameraTarget => _cameraTarget;
@@ -34,8 +41,14 @@ class MapProvider extends ChangeNotifier {
   bool get hasPendingMove => _hasPendingMove;
   List<MapMarker> get markers => List.unmodifiable(_markers);
   List<NLatLng>? get courseRoute => _courseRoute;
+  List<List<NLatLng>>? get courseSegments => _courseSegments;
   List<CourseSlot>? get courseSlots => _courseSlots;
   bool get hasCourseRoute => _courseRoute != null && _courseRoute!.isNotEmpty;
+
+  // 경로 관련 getter
+  RouteType get routeType => _routeType;
+  bool get isLoadingRoute => _isLoadingRoute;
+  RouteSummary? get routeSummary => _routeSummary;
 
   /// 최초 1회 마커/상태 세팅
   void ensureInitialized() {
@@ -128,11 +141,20 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
+  /// 경로 타입 변경
+  void setRouteType(RouteType type) {
+    if (_routeType == type) return;
+    _routeType = type;
+    notifyListeners();
+
+    // 코스가 있으면 새 경로 타입으로 다시 로드
+    if (_courseSlots != null && _courseSlots!.isNotEmpty) {
+      _loadRouteForCurrentCourse();
+    }
+  }
+
   /// 데이트 코스 경로 설정
-  void setCourseRoute(DateCourse course) {
-    _courseRoute = course.slots.map((slot) =>
-      NLatLng(slot.latitude, slot.longitude)
-    ).toList();
+  Future<void> setCourseRoute(DateCourse course) async {
     _courseSlots = course.slots;
 
     // 코스 슬롯 마커 추가 (기존 마커와 구분)
@@ -150,23 +172,110 @@ class MapProvider extends ChangeNotifier {
     }
 
     // 첫 번째 슬롯으로 카메라 이동
-    if (_courseRoute!.isNotEmpty) {
-      _cameraTarget = _courseRoute!.first;
-      _zoom = 13.0;
-      _hasPendingMove = true;
-    }
+    final firstSlot = course.slots.first;
+    _cameraTarget = NLatLng(firstSlot.latitude, firstSlot.longitude);
+    _zoom = 13.0;
+    _hasPendingMove = true;
 
     notifyListeners();
 
+    // 실제 경로 로드
+    await _loadRouteForCurrentCourse();
+
     if (kDebugMode) {
-      print('MapProvider: 코스 경로 설정 완료 (${_courseRoute!.length}개 지점)');
+      print('MapProvider: 코스 경로 설정 완료 (${course.slots.length}개 지점)');
     }
+  }
+
+  /// 현재 코스에 대한 경로 로드
+  Future<void> _loadRouteForCurrentCourse() async {
+    if (_courseSlots == null || _courseSlots!.length < 2) {
+      // 슬롯이 1개 이하면 직선 경로
+      if (_courseSlots != null && _courseSlots!.isNotEmpty) {
+        _courseRoute = _courseSlots!.map((slot) =>
+          NLatLng(slot.latitude, slot.longitude)
+        ).toList();
+        _courseSegments = null;
+        _routeSummary = null;
+      }
+      notifyListeners();
+      return;
+    }
+
+    _isLoadingRoute = true;
+    notifyListeners();
+
+    try {
+      // 슬롯 좌표 리스트 생성
+      final points = _courseSlots!.map((slot) =>
+        NLatLng(slot.latitude, slot.longitude)
+      ).toList();
+
+      // Directions API 호출 (구간별)
+      final segments = await DirectionsService.getMultiPointRoute(
+        points,
+        type: _routeType,
+      );
+
+      if (segments.isNotEmpty) {
+        // 구간별 경로 저장
+        _courseSegments = segments.map((s) => s.path).toList();
+
+        // 전체 경로 합치기 (기존 호환성)
+        final combinedPath = <NLatLng>[];
+        int totalDistance = 0;
+        int totalDuration = 0;
+
+        for (final segment in segments) {
+          if (combinedPath.isNotEmpty && segment.path.isNotEmpty) {
+            combinedPath.addAll(segment.path.skip(1));
+          } else {
+            combinedPath.addAll(segment.path);
+          }
+          totalDistance += segment.summary.distance;
+          totalDuration += segment.summary.duration;
+        }
+
+        _courseRoute = combinedPath;
+        _routeSummary = RouteSummary(
+          distance: totalDistance,
+          duration: totalDuration,
+        );
+
+        if (kDebugMode) {
+          print('🗺️ 경로 로드 완료: ${_routeSummary!.distanceText}, ${_routeSummary!.durationText}');
+        }
+      } else {
+        // API 실패 시 직선 경로 fallback
+        _courseRoute = points;
+        _courseSegments = null;
+        _routeSummary = null;
+        if (kDebugMode) {
+          print('⚠️ 경로 API 실패, 직선 경로 사용');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ 경로 로드 오류: $e');
+      }
+      // 오류 시 직선 경로
+      _courseRoute = _courseSlots!.map((slot) =>
+        NLatLng(slot.latitude, slot.longitude)
+      ).toList();
+      _courseSegments = null;
+      _routeSummary = null;
+    }
+
+    _isLoadingRoute = false;
+    notifyListeners();
   }
 
   /// 데이트 코스 경로 초기화
   void clearCourseRoute() {
     _courseRoute = null;
+    _courseSegments = null;
     _courseSlots = null;
+    _routeSummary = null;
     _markers.removeWhere((m) => m.id.startsWith('course_'));
     notifyListeners();
 
