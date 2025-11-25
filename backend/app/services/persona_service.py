@@ -407,7 +407,7 @@ class PersonaService:
 
     def _handle_regenerate_course_slot(self, session: dict, intent: dict, user_id: str = None) -> dict:
         """코스의 특정 슬롯 재생성 처리"""
-
+        
         # 세션에 저장된 코스 확인
         if "generated_course" not in session:
             return {
@@ -423,7 +423,9 @@ class PersonaService:
 
         extracted = intent.get("extracted_data", {})
         slot_index = extracted.get("slot_index")
-
+        category = extracted.get("category")
+        keyword = extracted.get("keyword")
+        
         if slot_index is None:
             return {
                 "action_taken": "error",
@@ -444,7 +446,9 @@ class PersonaService:
             updated_course = self.course_service.regenerate_course_slot(
                 course=course,
                 slot_index=slot_index,
-                user_id=user_id
+                user_id=user_id,
+                category=category,
+                keyword=keyword
             )
 
             # 세션에 업데이트된 코스 저장

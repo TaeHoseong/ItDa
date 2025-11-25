@@ -86,7 +86,8 @@ food와 category는 둘 다 추출할 수 있다.
     "start_time": "코스 시작 시간 (HH:MM)",
     "duration": "코스 총 시간 (분 단위, 예: 240)",
     "exclude_slots": "제외할 슬롯 타입 리스트 (예: [\"activity\"])",
-    "slot_index": "재생성할 슬롯 번호 (1부터 시작, 예: 1, 2, 3)"
+    "slot_index": "재생성할 슬롯 번호 (1부터 시작, 예: 1, 2, 3)",
+    "keyword": "유저가 바라는 특정 장소"
   }}
 }}
 
@@ -100,6 +101,7 @@ food와 category는 둘 다 추출할 수 있다.
 "이번 주 일정" → view_schedule (timeframe: this_week)
 "내일 데이트 코스 추천해줘" → generate_course (date: 내일, template: auto)
 "1번 슬롯 다른 장소로" → regenerate_course_slot (slot_index: 1)
+"1번 슬롯 파스타맛집으로" -> regenerate_course_slot (slot_index:1, category: "food_cafe", keyword: 파스타맛집)
 "카페 다른 곳으로" → regenerate_course_slot (slot_index를 카페 슬롯 번호로 추출)
 "카페 위주 반나절 코스" → generate_course (template: cafe_date)
 "하루 데이트 코스 짜줘" → generate_course (template: auto)
