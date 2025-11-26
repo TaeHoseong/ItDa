@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/user_provider.dart';
 import '../models/chat_message.dart';
+import 'settings_screen.dart'; // ✅ 설정 화면 import
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -59,6 +60,20 @@ class _ChatScreenState extends State<ChatScreen> {
           '커플 채팅',
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
+        // ✅ 여기: 우상단 빨간 동그라미 위치에 설정 아이콘
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SettingsScreen(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -107,8 +122,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
                   return ListView.builder(
                     controller: _scrollController,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                     itemCount: msgs.length,
                     itemBuilder: (context, index) {
                       final msg = msgs[index];
@@ -208,8 +223,7 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final align =
-        isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+    final align = isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     final color = isMine ? const Color(0xFFFD9180) : Colors.white;
     final textColor = isMine ? Colors.white : Colors.black87;
 
@@ -218,8 +232,7 @@ class _ChatBubble extends StatelessWidget {
       children: [
         Container(
           margin: const EdgeInsets.symmetric(vertical: 4),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           constraints: BoxConstraints(
             maxWidth: MediaQuery.of(context).size.width * 0.7,
           ),

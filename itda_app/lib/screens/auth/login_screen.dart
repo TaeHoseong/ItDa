@@ -5,6 +5,7 @@ import 'package:itda_app/services/auth_flow_helper.dart';
 import 'package:provider/provider.dart';
 import 'package:itda_app/providers/user_provider.dart';
 import 'package:itda_app/models/app_user.dart';
+import 'package:itda_app/services/session_store.dart';
 
 // ▼ 추가: Supabase
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -14,30 +15,6 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
-// 간단 세션 저장 유틸
-class _SessionStore {
-  static const _kAccess = 'access_token';
-  static const _kRefresh = 'refresh_token';
-  static const _kUserId = 'user_id';
-  final _storage = const FlutterSecureStorage();
-
-  Future<void> save(String access, String? refresh, String? userId) async {
-    await _storage.write(key: _kAccess, value: access);
-    if (refresh != null) {
-      await _storage.write(key: _kRefresh, value: refresh);
-    }
-    if (userId != null) {
-      await _storage.write(key: _kUserId, value: userId);
-    }
-  }
-
-  Future<void> clear() async {
-    await _storage.delete(key: _kAccess);
-    await _storage.delete(key: _kRefresh);
-    await _storage.delete(key: _kUserId);
-  }
-}
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -58,7 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
     serverClientId:
         '545845229063-okupe6in5bos5lkb9n4apc18t62hpqj1.apps.googleusercontent.com',
   );
-  final _session = _SessionStore();
+  final _session = SessionStore();
 
   @override
   void dispose() {
