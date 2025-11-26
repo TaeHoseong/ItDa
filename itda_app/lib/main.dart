@@ -11,6 +11,7 @@ import 'screens/map_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/persona_screen.dart';
 import 'screens/calendar_screen.dart';
+import 'screens/settings_screen.dart';
 
 import 'providers/persona_chat_provider.dart';
 import 'providers/map_provider.dart';
@@ -123,7 +124,7 @@ class ItdaApp extends StatelessWidget {
           brightness: Brightness.light,
         ),
         scaffoldBackgroundColor: const Color(0xFFFAF8F5),
-
+        
         // NavigationBar 스타일
         navigationBarTheme: NavigationBarThemeData(
           elevation: 3,
@@ -139,6 +140,11 @@ class ItdaApp extends StatelessWidget {
           }),
         ),
       ),
+      routes: {
+        '/login': (context) => const LoginScreen(),
+        '/settings': (context) => const SettingsScreen(),
+        // 다른 화면들도 필요하면...
+      },
       home: const LoginScreen(),
     );
   }
