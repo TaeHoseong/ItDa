@@ -2,6 +2,7 @@ import numpy as np
 import os
 import json
 from app.core.supabase_client import get_supabase
+from app.core.extra_features import get_extra_feature_service
 from dotenv import load_dotenv
 import math
 
@@ -44,7 +45,29 @@ def extract_features(place: json, persona):
         print(f"key error | {e} in place: {place.get('name', 'Unknown')}")
         return np.zeros(20), 0, 0  # 수정: 3개 값 반환 (4개 아님)
 
-def recommend_topk(persona, last_recommend=None, candidate_names=None, category=None, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4):
+def recommend_topk(persona, last_recommend=None, candidate_names=None, category=None, extra_feature=None, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4):
+    """
+    장소 추천 알고리즘
+
+    Args:
+        persona: 20차원 페르소나 벡터
+        last_recommend: 제외할 장소 이름 리스트
+        candidate_names: 후보 장소 이름 리스트 (None이면 전체)
+        category: 카테고리 필터
+        extra_feature: 추가 조건 (atmosphere_romantic, rating_high 등)
+        k: 추천 개수
+        alpha~delta: 스코어 가중치
+    """
+    # extra_feature 적용 (weight 타입)
+    filter_config = None
+    if extra_feature:
+        service = get_extra_feature_service()
+        persona, alpha, beta, gamma, delta = service.apply(
+            persona, alpha, beta, gamma, delta, extra_feature
+        )
+        # filter 타입인 경우 필터 설정 가져오기
+        filter_config = service.get_filter_config(extra_feature)
+
     supabase = get_supabase()
     response = supabase.table("places").select("*").execute()
     places = response.data
@@ -82,6 +105,23 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, category=
         if candidate_names and name not in candidate_names:
             # print(f"skip {name} (not in candidate names)")
             continue
+
+        # extra_feature 필터링 (filter 타입)
+        if filter_config:
+            field_path = filter_config["field"].split(".")  # "atmosphere.romantic" -> ["atmosphere", "romantic"]
+            threshold = filter_config["threshold"]
+            try:
+                place_features = scores["placeFeatures"]
+                value = place_features
+                for key in field_path:
+                    value = value[key]
+                if value < threshold:
+                    # print(f"skip {name} ({filter_config['field']}={value:.2f} < {threshold})")
+                    continue
+            except (KeyError, TypeError):
+                # 필드가 없으면 스킵
+                continue
+
         features, rating, price  = extract_features(scores, persona)
         distance = haversine_distance(persona_position, [latitude, longitude])
         similarity_cos = cos_similarity(features, persona)
