@@ -247,7 +247,6 @@ class CourseProvider extends ChangeNotifier {
           'total_distance, total_duration, slots',
         )
         .filter('course_id', 'in', ids);
-    debugPrint('[DEBUG] Supabase courses fetch rows: $rows');
     _coursesById.clear();
 
     for (final row in rows as List) {
@@ -296,8 +295,6 @@ class CourseProvider extends ChangeNotifier {
               'in',
               ids,
             );
-
-    debugPrint('[DEBUG] Supabase diary fetch rows: $rows');
 
     _diariesByCourseId.clear();
 
