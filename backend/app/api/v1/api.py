@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, persona, places, users, courses, match
+from app.api.v1.endpoints import auth, persona, places, users, courses, match, feedback
 
 api_router = APIRouter()
 
@@ -43,4 +43,11 @@ api_router.include_router(
     match.router,
     prefix="/match",
     tags=["match"]
+)
+
+# 피드백 학습
+api_router.include_router(
+    feedback.router,
+    prefix="/feedback",
+    tags=["feedback"]
 )
