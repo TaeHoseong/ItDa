@@ -8,6 +8,7 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/date_course.dart';
+import '../services/feedback_api_service.dart';
 
 /// =====================
 /// 캘린더 상태 (보기 전용)
@@ -303,11 +304,13 @@ class CourseProvider extends ChangeNotifier {
     for (final row in rows as List) {
       final base = row as Map<String, dynamic>;
       final courseId = base['course_id'] as String;
-      final json = base['json'] as Map<String, dynamic>?;
+      final jsonData = base['json'];
 
-      if (json == null) continue;
+      if (jsonData == null) continue;
 
-      final slots = (json['slots'] as List<dynamic>? ?? [])
+      // json 필드가 리스트로 직접 저장됨
+      final slotsList = jsonData is List ? jsonData : (jsonData['slots'] as List<dynamic>? ?? []);
+      final slots = slotsList
           .map((e) => DiarySlotEntry.fromJson(e as Map<String, dynamic>))
           .toList();
 
@@ -562,19 +565,20 @@ class CourseProvider extends ChangeNotifier {
     }
 
     final courseId = course.id!;
-    final jsonMap = {
-      'slots': slots.map((e) => e.toJson()).toList(),
-    };
+    final jsonList = slots.map((e) => e.toJson()).toList();
 
     await supabase.from('diary').upsert({
       'course_id': courseId,
       'couple_id': _currentCoupleId,
       'template': course.template,
-      'json': jsonMap,
+      'json': jsonList,
     });
 
     _diariesByCourseId[courseId] = slots;
     notifyListeners();
+
+    // 피드백 학습: 별점 기반 커플 페르소나 업데이트
+    FeedbackApiService.recalculatePersona();
   }
 
   /// 한 코스의 diary 삭제
@@ -582,6 +586,9 @@ class CourseProvider extends ChangeNotifier {
     await supabase.from('diary').delete().eq('course_id', courseId);
     _diariesByCourseId.remove(courseId);
     notifyListeners();
+
+    // 피드백 학습: 일기 삭제 시 페르소나 재계산 (원래대로 복원)
+    FeedbackApiService.recalculatePersona();
   }
 
   // =====================
