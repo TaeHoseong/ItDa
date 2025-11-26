@@ -544,7 +544,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ),
           ),
           content: Text(
-            '정말 "${course.template}" 코스를 삭제하시겠습니까?',
+            '정말 이 코스를 삭제하시겠습니까?',
             style: const TextStyle(fontSize: 15),
           ),
           actions: [
