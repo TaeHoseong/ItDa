@@ -219,6 +219,31 @@ class CourseService:
 
         # 5. 기본값: full_day
         return "full_day"
+    
+    def _create_template(self, slots: List[CourseSlot]):
+        # TODO: template 생성 로직?
+        template = "custom"
+        return template
+    
+    def _find_template(self, slots: List[CourseSlot]):
+        for template_name, template_slots in self.TEMPLATES.items():
+
+            # slot 개수가 다르면 다른 템플릿
+            if len(slots) != len(template_slots):
+                continue
+
+            matched = True
+            for slot, t in zip(slots, template_slots):
+                if slot.slot_type != t["slot_type"] or slot.category != t["category"]:
+                    matched = False
+                    break
+
+            if matched:
+                return template_name
+
+        # 매칭되는 템플릿이 없으면 custom template 생성
+        return self._create_template(slots)
+    
 
     def _apply_preferences(
         self,
@@ -417,13 +442,15 @@ class CourseService:
         # 기존 슬롯 정보
         old_slot = course.slots[slot_index]
         new_category = old_slot.category if old_slot.category == category else category
+        new_slot_type, new_emoji = self._infer_slot_type_from_slot(old_slot, new_category)
+        
         # 슬롯 설정 재구성
         slot_config = {
-            "slot_type": old_slot.slot_type,
-            "category": new_category,  # 기존 슬롯의 category 사용
+            "slot_type": new_slot_type, 
+            "category": new_category,  # 카테고리 업데이트
             "start_time": old_slot.start_time,
             "duration": old_slot.duration,
-            "emoji": old_slot.emoji,
+            "emoji": new_emoji,         # 이모지 업데이트
         }
 
         # 이미 사용된 장소들 (현재 슬롯 포함 - 같은 장소가 다시 나오지 않도록)
@@ -473,7 +500,9 @@ class CourseService:
 
         # 슬롯 교체
         course.slots[slot_index] = new_slot
-
+        new_template = self._find_template(course.slots)
+        print(f"[DEBUG] template changed from {course.template} to {new_template}")
+        course.template = new_template
         # 총 거리 재계산
         course.total_distance = sum(
             s.distance_from_previous for s in course.slots
@@ -500,6 +529,36 @@ class CourseService:
         }
         return mapping.get(slot_type, "food")
 
+    def _infer_slot_type_from_slot(self, slot: CourseSlot, new_category: str) -> str:
+        def to_time(time_str: str):
+            return datetime.strptime(time_str, "%H:%M").time()
+        start_time = to_time(slot.start_time)
+        
+        if new_category == "food":
+            if start_time >= to_time("17:00"):
+                slot_type = "dinner"
+                emoji = "🍴"
+            elif start_time >= to_time("12:00"):
+                slot_type = "lunch"
+                emoji = "🍽️"
+        elif new_category == "cafe":
+            slot_type = "cafe"
+            emoji = "☕"
+        elif new_category == "activity_sports":
+            slot_type = "activity"
+            emoji = "⚽"
+        elif new_category == "natural_healing":
+            if start_time >= to_time("20:00"):
+                slot_type = "night_view"
+                emoji = "🌃"
+            else:
+                slot_type = "walk"
+                emoji = "🚶"
+        elif new_category == "culture_art":
+            slot_type = "exhibition"
+            emoji = "🎨"
+        
+        return slot_type, emoji
     # ========== CRUD Methods ==========
 
     def create_course(self, user_id: str, course_data: dict) -> dict:
