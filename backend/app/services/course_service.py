@@ -300,7 +300,8 @@ class CourseService:
         slot_config: Dict,
         previous_location: Optional[Tuple[float, float]] = None,
         exclude_places: Optional[List[str]] = None,
-        keyword: str = None
+        keyword: str = None,
+        extra_feature: str = None
     ) -> Optional[CourseSlot]:
         """
         특정 슬롯에 대한 장소 추천
@@ -311,7 +312,8 @@ class CourseService:
             previous_location: 이전 장소 위치 (lat, lng)
             exclude_places: 제외할 장소 이름 리스트 (중복 방지)
             keyword: 유저가 원하는 특정한 장소
-            
+            extra_feature: 추가 조건 (atmosphere_romantic, rating_high 등)
+
         Returns:
             CourseSlot: 추천된 슬롯 (장소 포함)
         """
@@ -320,6 +322,8 @@ class CourseService:
         print(f"\n[SEARCH] [{slot_config['slot_type']}] Recommending for category: {category}")
         if exclude_places:
             print(f"   Excluding places: {exclude_places}")
+        if extra_feature:
+            print(f"   Extra feature: {extra_feature}")
 
         # suggest_service를 통해 장소 추천
         # 점진적으로 검색 개수를 늘려가며 시도
@@ -330,6 +334,7 @@ class CourseService:
                     user_id=user_id,
                     category=category,
                     specific_food=keyword,
+                    extra_feature=extra_feature,
                     last_recommend=exclude_places,  # 이미 사용된 장소 제외
                     k=k
                 )
@@ -417,7 +422,8 @@ class CourseService:
         slot_index: int,
         user_id: str = None,
         category: str = None,
-        keyword: str = None
+        keyword: str = None,
+        extra_feature: str = None
     ) -> DateCourse:
         """
         코스의 특정 슬롯만 재생성
@@ -427,7 +433,8 @@ class CourseService:
             slot_index: 재생성할 슬롯 인덱스 (0부터 시작)
             user_id: 사용자 ID (페르소나 기반 추천용)
             keyword: 유저가 원하는 특정 장소
-            
+            extra_feature: 추가 조건 (atmosphere_romantic, rating_high 등)
+
         Returns:
             DateCourse: 슬롯이 교체된 새로운 코스
         """
@@ -441,7 +448,8 @@ class CourseService:
 
         # 기존 슬롯 정보
         old_slot = course.slots[slot_index]
-        new_category = old_slot.category if old_slot.category == category else category
+        # category가 None이면 기존 슬롯의 category 유지
+        new_category = category if category else old_slot.category
         new_slot_type, new_emoji = self._infer_slot_type_from_slot(old_slot, new_category)
         
         # 슬롯 설정 재구성
@@ -469,7 +477,8 @@ class CourseService:
             slot_config=slot_config,
             previous_location=previous_location,
             exclude_places=exclude_places,
-            keyword=keyword
+            keyword=keyword,
+            extra_feature=extra_feature
         )
 
         if not new_slot:
@@ -529,11 +538,17 @@ class CourseService:
         }
         return mapping.get(slot_type, "food")
 
-    def _infer_slot_type_from_slot(self, slot: CourseSlot, new_category: str) -> str:
+    def _infer_slot_type_from_slot(self, slot: CourseSlot, new_category: str) -> tuple:
+        """슬롯과 카테고리로부터 slot_type과 emoji 추론"""
         def to_time(time_str: str):
             return datetime.strptime(time_str, "%H:%M").time()
+
         start_time = to_time(slot.start_time)
-        
+
+        # 기본값 설정 (기존 슬롯의 값 또는 일반적인 기본값)
+        slot_type = slot.slot_type if slot.slot_type else "activity"
+        emoji = slot.emoji if slot.emoji else "📍"
+
         if new_category == "food":
             if start_time >= to_time("17:00"):
                 slot_type = "dinner"
@@ -541,6 +556,10 @@ class CourseService:
             elif start_time >= to_time("12:00"):
                 slot_type = "lunch"
                 emoji = "🍽️"
+            else:
+                # 12시 이전의 음식점 (브런치 등)
+                slot_type = "brunch"
+                emoji = "🥗"
         elif new_category == "cafe":
             slot_type = "cafe"
             emoji = "☕"
@@ -557,7 +576,13 @@ class CourseService:
         elif new_category == "culture_art":
             slot_type = "exhibition"
             emoji = "🎨"
-        
+        elif new_category == "craft_experience":
+            slot_type = "craft"
+            emoji = "🎨"
+        elif new_category == "shopping":
+            slot_type = "shopping"
+            emoji = "🛍️"
+
         return slot_type, emoji
     # ========== CRUD Methods ==========
 

@@ -135,6 +135,7 @@ class SuggestService:
         last_recommend=None,
         category: str = None,
         specific_food: str = None,
+        extra_feature: str = None,
         persona: Optional[List[float]] = None,
         user_id: Optional[str] = None,
         k: int = 5,
@@ -150,6 +151,7 @@ class SuggestService:
         Args:
             persona: 20차원 페르소나 벡터 (우선순위 1)
             user_id: User ID (우선순위 2, persona가 None일 때 DB에서 조회)
+            extra_feature: 추가 조건 (atmosphere_romantic, rating_high 등)
             k: 추천할 장소 개수
             alpha: similarity 가중치
             beta: distance 가중치
@@ -193,7 +195,7 @@ class SuggestService:
             print(f"search for food {specific_food}...")
             candidates = self.get_candidate_places(specific_food)
 
-        # algorithm.py의 recommend_topk() 호출 (수정 없이 사용)
+        # algorithm.py의 recommend_topk() 호출
         results = []
         try:
             results = algorithm.recommend_topk(
@@ -201,6 +203,7 @@ class SuggestService:
                 last_recommend=last_recommend,
                 category=category,
                 candidate_names=candidates,
+                extra_feature=extra_feature,
                 k=k,
                 alpha=alpha,
                 beta=beta,

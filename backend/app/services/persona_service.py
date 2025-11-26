@@ -141,20 +141,30 @@ class PersonaService:
     def _handle_recommend_place(self, session: dict, intent: dict, user_id: str = None) -> dict:
         """장소 추천 처리"""
         specific_food = intent["extracted_data"]["food"]
-        category = intent["extracted_data"]["category"]        # 유저가 원하는 특정한 음식이 있을 경우
+        category = intent["extracted_data"]["category"]
+        extra_feature = intent["extracted_data"].get("extra_feature")  # extra_feature는 없을 수 있음
+
         print(f"\n{'='*60}")
         print(f"[RECOMMENDATION START]")
         print(f"   User ID: {user_id}")
+        if extra_feature:
+            print(f"   Extra Feature: {extra_feature}")
         print(f"{'='*60}\n")
 
         # suggest_service를 통해 추천 장소 가져오기 (user_id 전달)
         places = self.suggest_service.get_recommendations(
-            user_id=user_id, category=category, specific_food=specific_food, k=5)
+            user_id=user_id,
+            category=category,
+            specific_food=specific_food,
+            extra_feature=extra_feature,
+            k=5
+        )
 
         # 세션에 추천된 장소 저장 (장소 선택 시 사용)
         session["recommended_places"] = places
         session["last_category"] = category
         session["last_food"] = specific_food
+        session["last_extra_feature"] = extra_feature
 
         # 터미널 로깅
         print(f"\n{'='*60}")
@@ -176,15 +186,16 @@ class PersonaService:
         # 이전 추천에서 제외할 장소 리스트
         prev_places = [p["name"] for p in session["recommended_places"]]
 
-        # 새 추천 가져오기
+        # 새 추천 가져오기 (extra_feature도 유지)
         new_places = self.suggest_service.get_recommendations(
             user_id=user_id,
             last_recommend=prev_places,
             category=session["last_category"],
             specific_food=session["last_food"],
+            extra_feature=session["last_extra_feature"],
             k=5
         )
-        print(f"{[p["name"] for p in new_places]}")
+        print(f"{[p['name'] for p in new_places]}")
         # 세션 업데이트
         session["recommended_places"].extend(new_places)
 
@@ -425,7 +436,8 @@ class PersonaService:
         slot_index = extracted.get("slot_index")
         category = extracted.get("category")
         keyword = extracted.get("keyword")
-        
+        extra_feature = extracted.get("extra_feature")
+
         if slot_index is None:
             return {
                 "action_taken": "error",
@@ -437,6 +449,8 @@ class PersonaService:
 
         print(f"\n{'='*60}")
         print(f"[REGENERATE SLOT] #{slot_index}")
+        if extra_feature:
+            print(f"[EXTRA_FEATURE] {extra_feature}")
         print(f"{'='*60}\n")
 
         try:
@@ -448,7 +462,8 @@ class PersonaService:
                 slot_index=slot_index,
                 user_id=user_id,
                 category=category,
-                keyword=keyword
+                keyword=keyword,
+                extra_feature=extra_feature
             )
 
             # 세션에 업데이트된 코스 저장

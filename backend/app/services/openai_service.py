@@ -1,5 +1,6 @@
 from openai import AsyncOpenAI
 from app.config import settings
+from app.core.extra_features import get_extra_feature_service
 import json
 from datetime import datetime, timedelta
 import logging
@@ -89,7 +90,8 @@ food와 category는 둘 다 추출할 수 있다.
     "duration": "코스 총 시간 (분 단위, 예: 240)",
     "exclude_slots": "제외할 슬롯 타입 리스트 (예: [\"activity\"])",
     "slot_index": "재생성할 슬롯 번호 (1부터 시작, 예: 1, 2, 3)",
-    "keyword": "유저가 바라는 특정 장소"
+    "keyword": "유저가 바라는 특정 장소",
+    {get_extra_feature_service().get_prompt_fragment()}
   }}
 }}
 
@@ -98,6 +100,9 @@ food와 category는 둘 다 추출할 수 있다.
 "파스타 맛집 추천해줘" → recommend_place (장소 추천)
 "데이트 장소 알려줘" → recommend_place (장소 추천)
 "어디 갈까?" → recommend_place (장소 추천)
+"분위기 좋은 카페 추천해줘" → recommend_place (category: cafe, extra_feature: atmosphere_romantic)
+"조용한 식당 알려줘" → recommend_place (category: food, extra_feature: atmosphere_quiet)
+"별점 높은 맛집 추천해줘" → recommend_place (category: food, extra_feature: rating_high)
 "내 일정 보여줘" → view_schedule (timeframe: all)
 "오늘 일정 뭐있어?" → view_schedule (timeframe: today)
 "이번 주 일정" → view_schedule (timeframe: this_week)
@@ -105,6 +110,11 @@ food와 category는 둘 다 추출할 수 있다.
 "1번 슬롯 다른 장소로" → regenerate_course_slot (slot_index: 1)
 "1번 슬롯 파스타맛집으로" -> regenerate_course_slot (slot_index:1, category: "food", keyword: 파스타맛집)
 "카페 다른 곳으로" → regenerate_course_slot (slot_index를 카페 슬롯 번호로 추출)
+"분위기 좋은 카페로" → regenerate_course_slot (category: cafe, extra_feature: atmosphere_romantic)
+"조용한 곳으로" → regenerate_course_slot (extra_feature: atmosphere_quiet)
+"별점 높은 식당으로" → regenerate_course_slot (category: food, extra_feature: rating_high)
+"트렌디한 식당으로" → regenerate_course_slot (category: food, extra_feature: atmosphere_trendy)
+"저렴한 곳으로" → regenerate_course_slot (extra_feature: price_cheap)
 "카페 위주 반나절 코스" → generate_course (template: cafe_date)
 "하루 데이트 코스 짜줘" → generate_course (template: auto)
 "오후 2시부터 4시간 코스" → generate_course (start_time: 14:00, duration: 240)
