@@ -4,7 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
-import '../services/directions_service.dart';
+import '../providers/course_provider.dart';
+import '../services/directions_service.dart'; // 유지
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -13,30 +14,89 @@ class MapScreen extends StatefulWidget {
   State<MapScreen> createState() => _MapScreenState();
 }
 
+enum _BottomTab { place, route }
+
 class _MapScreenState extends State<MapScreen> {
   NaverMapController? _mapController;
   List<String> _currentMarkerIds = [];
   bool _isSyncing = false;
   bool _isProgrammaticMove = false;
-  List<NPolylineOverlay> _coursePolylines = [];  // 구간별 폴리라인
-  int _currentRouteHash = 0;  // 경로 변경 감지용
+  List<NPolylineOverlay> _coursePolylines = [];
+  int _currentRouteHash = 0;
 
-  // 구간별 색상 (핑크 계열 그라데이션)
+  _BottomTab _currentTab = _BottomTab.place;
+
+  // 🔹 경로 타입별로 한 번 계산된 소요 시간/거리 캐시
+  final Map<RouteType, String> _cachedDuration = {};
+  final Map<RouteType, String> _cachedDistance = {};
+
+  // 🔹 MapProvider 상태 변화 감지용 (로딩 상태 트래킹)
+  bool _prevIsLoadingRoute = false;
+  RouteSummary? _prevRouteSummary;
+
   static const List<Color> _segmentColors = [
-    Color(0xFFFF6B9D),  // 핑크
-    Color(0xFFE91E63),  // 진한 핑크
-    Color(0xFFFF4081),  // 밝은 핑크
-    Color(0xFFF50057),  // 레드 핑크
-    Color(0xFFFF80AB),  // 연한 핑크
+    Color(0xFFFF6B9D),
+    Color(0xFFE91E63),
+    Color(0xFFFF4081),
+    Color(0xFFF50057),
+    Color(0xFFFF80AB),
   ];
 
-  // ========= 마커 관련 =========
+  @override
+  void initState() {
+    super.initState();
+    // MapProvider 리스너 등록
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final mapProvider = context.read<MapProvider>();
+      mapProvider.addListener(_onMapProviderChanged);
+      _prevIsLoadingRoute = mapProvider.isLoadingRoute;
+      _prevRouteSummary = mapProvider.routeSummary;
+    });
+  }
 
-  /// 마커를 지도에 추가
+  @override
+  void dispose() {
+    // 리스너 제거
+    try {
+      context.read<MapProvider>().removeListener(_onMapProviderChanged);
+    } catch (_) {}
+    super.dispose();
+  }
+
+  /// 🔹 MapProvider 변경 시 호출
+  /// - "경로 로딩이 끝난 시점"에만 캐시를 갱신
+  void _onMapProviderChanged() {
+    if (!mounted) return;
+    final mapProvider = context.read<MapProvider>();
+
+    final bool isLoading = mapProvider.isLoadingRoute;
+    final RouteSummary? summary = mapProvider.routeSummary;
+    final RouteType type = mapProvider.routeType;
+
+    // 이전에는 로딩 중이었는데, 지금은 로딩이 끝났고, summary가 새로 생겼을 때만 캐시 갱신
+    final bool loadingJustFinished =
+        _prevIsLoadingRoute && !isLoading && summary != null;
+
+    final bool summaryChanged = summary != null &&
+        (_prevRouteSummary == null ||
+            summary.distance != _prevRouteSummary!.distance ||
+            summary.duration != _prevRouteSummary!.duration);
+
+    if (loadingJustFinished && summaryChanged) {
+      setState(() {
+        _cachedDuration[type] = summary.durationText;
+        _cachedDistance[type] = summary.distanceText;
+      });
+    }
+
+    _prevIsLoadingRoute = isLoading;
+    _prevRouteSummary = summary;
+  }
+
+  // ================= 마커 및 폴리라인 함수 =================
+
   Future<void> _addMarkersToMap(
-    NaverMapController controller,
-    List<MapMarker> markers,
-  ) async {
+      NaverMapController controller, List<MapMarker> markers) async {
     for (final m in markers) {
       final marker = NMarker(
         id: m.id,
@@ -44,24 +104,14 @@ class _MapScreenState extends State<MapScreen> {
         caption: m.caption != null ? NOverlayCaption(text: m.caption!) : null,
       );
 
-      // 마커 클릭 이벤트
       marker.setOnTapListener((overlay) {
-        _onMarkerTap(m);
+        debugPrint('마커 클릭: ${marker.info}');
       });
 
       await controller.addOverlay(marker);
     }
   }
 
-  /// 마커 클릭 시 호출
-  void _onMarkerTap(MapMarker marker) {
-    debugPrint('마커 클릭: ${marker.id}');
-    // TODO: 필요하면 여기서 bottom sheet 띄우기 등 처리
-  }
-
-  // ========= 코스 폴리라인 =========
-
-  /// 구간별 코스 경로 폴리라인 추가
   Future<void> _addCoursePolylines(
     NaverMapController controller,
     List<List<NLatLng>>? segments,
@@ -71,7 +121,6 @@ class _MapScreenState extends State<MapScreen> {
       _coursePolylines.clear();
 
       if (segments != null && segments.isNotEmpty) {
-        // 구간별로 다른 색상의 폴리라인 추가
         for (int i = 0; i < segments.length; i++) {
           final segment = segments[i];
           if (segment.isEmpty) continue;
@@ -83,59 +132,40 @@ class _MapScreenState extends State<MapScreen> {
             color: color,
             width: 5,
           );
-
           await controller.addOverlay(polyline);
           _coursePolylines.add(polyline);
         }
-        debugPrint('🗺️ 구간별 폴리라인 추가 완료 (${segments.length}개 구간)');
       } else if (fallbackRoute != null && fallbackRoute.isNotEmpty) {
-        // fallback: 단일 폴리라인
         final polyline = NPolylineOverlay(
-          id: 'course_route',
+          id: 'fallback_route',
           coords: fallbackRoute,
           color: const Color(0xFFFF6B9D),
           width: 5,
         );
-
         await controller.addOverlay(polyline);
         _coursePolylines.add(polyline);
-        debugPrint('🗺️ 단일 폴리라인 추가 완료 (${fallbackRoute.length}개 지점)');
       }
     } catch (e) {
-      debugPrint('❌ 폴리라인 추가 오류: $e');
+      debugPrint('Polyline error: $e');
     }
   }
 
-  /// 코스 경로 폴리라인 제거
-  Future<void> _removeCoursePolylines(NaverMapController controller) async {
-    for (final polyline in _coursePolylines) {
-      await controller.deleteOverlay(polyline.info);
-    }
-    _coursePolylines.clear();
-    debugPrint('🗺️ 코스 경로 폴리라인 제거 완료');
-  }
-
-  // ========= 카메라 이동 =========
-
-  void _moveCameraToTarget(MapProvider mapProvider) {
-    final controller = _mapController;
-    if (controller == null) return;
+  void _moveCameraToTarget(MapProvider provider) {
+    if (_mapController == null) return;
 
     _isProgrammaticMove = true;
 
-    final cameraUpdate = NCameraUpdate.fromCameraPosition(
-      NCameraPosition(
-        target: mapProvider.cameraTarget,
-        zoom: mapProvider.zoom,
+    _mapController!.updateCamera(
+      NCameraUpdate.fromCameraPosition(
+        NCameraPosition(
+          target: provider.cameraTarget,
+          zoom: provider.zoom,
+        ),
       ),
     );
-    controller.updateCamera(cameraUpdate);
 
-    mapProvider.clearPendingMove();
-    debugPrint('🗺️ 지도 탭 진입 시 카메라 이동 완료');
+    provider.clearPendingMove();
   }
-
-  // ========= 마커 리스트 비교 =========
 
   bool _isSameMarkerList(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
@@ -145,63 +175,89 @@ class _MapScreenState extends State<MapScreen> {
     return true;
   }
 
-  // ========= build =========
+  // ================= build =================
 
   @override
   Widget build(BuildContext context) {
     final padding = MediaQuery.of(context).padding;
     final mapProvider = context.watch<MapProvider>();
     final navigationProvider = context.watch<NavigationProvider>();
+    final courseProvider = context.watch<CourseProvider>();
 
-    // 🔁 지도 탭에 있을 때만 동기화/카메라 이동
+    // 날짜 상관 없이, 저장된 모든 코스
+    final allCourses = courseProvider.allCourses;
+
+    // 버튼 안에서 보여줄 시간/거리 라벨 (캐시 우선)
+    String durationLabelFor(RouteType type) {
+      final cached = _cachedDuration[type];
+      if (cached != null && cached.isNotEmpty) {
+        return cached;
+      }
+
+      if (mapProvider.routeType == type) {
+        if (mapProvider.isLoadingRoute) return '시간 계산 중';
+        if (mapProvider.routeSummary != null) {
+          return mapProvider.routeSummary!.durationText;
+        }
+      }
+      return '-';
+    }
+
+    String distanceLabelFor(RouteType type) {
+      final cached = _cachedDistance[type];
+      if (cached != null && cached.isNotEmpty) {
+        return cached;
+      }
+
+      if (mapProvider.routeType == type) {
+        if (mapProvider.isLoadingRoute) return '거리 계산 중';
+        if (mapProvider.routeSummary != null) {
+          return mapProvider.routeSummary!.distanceText;
+        }
+      }
+      return '-';
+    }
+
+    // ===== 지도 오버레이 동기화 =====
     if (navigationProvider.currentIndex == 1 && _mapController != null) {
-      // 1) 카메라 이동 예약 처리
       if (mapProvider.hasPendingMove) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _moveCameraToTarget(mapProvider);
         });
       }
 
-      // 2) 선택된 코스 상태에 맞춰 마커/폴리라인 동기화
       final newMarkerIds = mapProvider.markers.map((m) => m.id).toList();
-
-      // 경로 좌표 변경 감지 (경로 타입 변경 시 폴리라인 다시 그리기)
-      // 경로 길이 + 첫/마지막 좌표로 해시 계산
       final route = mapProvider.courseRoute;
       final newRouteHash = route == null || route.isEmpty
           ? 0
           : route.length.hashCode ^
-            route.first.latitude.hashCode ^
-            route.last.longitude.hashCode;
+              route.first.latitude.hashCode ^
+              route.last.longitude.hashCode;
 
       final shouldRedrawOverlays =
           !_isSameMarkerList(_currentMarkerIds, newMarkerIds) ||
-          (mapProvider.hasCourseRoute && _coursePolylines.isEmpty) ||
-          (!mapProvider.hasCourseRoute && _coursePolylines.isNotEmpty) ||
-          (_currentRouteHash != newRouteHash);  // 경로 변경 감지
+              (mapProvider.hasCourseRoute && _coursePolylines.isEmpty) ||
+              (!mapProvider.hasCourseRoute && _coursePolylines.isNotEmpty) ||
+              (_currentRouteHash != newRouteHash);
 
       if (shouldRedrawOverlays && !_isSyncing) {
         _isSyncing = true;
         WidgetsBinding.instance.addPostFrameCallback((_) async {
-          final controller = _mapController;
-          if (controller == null) {
+          if (_mapController == null) {
             _isSyncing = false;
             return;
           }
 
-          // 기존 오버레이 모두 제거
-          await controller.clearOverlays();
+          await _mapController!.clearOverlays();
           _coursePolylines.clear();
 
-          // ✅ MapProvider.markers만 다시 그림
           if (mapProvider.markers.isNotEmpty) {
-            await _addMarkersToMap(controller, mapProvider.markers);
+            await _addMarkersToMap(_mapController!, mapProvider.markers);
           }
 
-          // ✅ 선택된 코스가 있을 때만 폴리라인 그림 (구간별)
           if (mapProvider.hasCourseRoute) {
             await _addCoursePolylines(
-              controller,
+              _mapController!,
               mapProvider.courseSegments,
               mapProvider.courseRoute,
             );
@@ -214,11 +270,13 @@ class _MapScreenState extends State<MapScreen> {
       }
     }
 
+    // ================= UI =================
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
       body: Stack(
         children: [
-          // ================= NAVER MAP =================
+          // ===== NAVER MAP =====
           NaverMap(
             options: NaverMapViewOptions(
               initialCameraPosition: NCameraPosition(
@@ -228,15 +286,10 @@ class _MapScreenState extends State<MapScreen> {
             ),
             onMapReady: (controller) async {
               _mapController = controller;
-
-              // Provider 초기화 (서울시청 마커 등)
               mapProvider.ensureInitialized();
 
-              // 초기 진입 시 상태대로 마커/폴리라인 그리기
               if (mapProvider.markers.isNotEmpty) {
                 await _addMarkersToMap(controller, mapProvider.markers);
-                _currentMarkerIds =
-                    mapProvider.markers.map((m) => m.id).toList();
               }
 
               if (mapProvider.hasCourseRoute) {
@@ -256,23 +309,19 @@ class _MapScreenState extends State<MapScreen> {
                 return;
               }
 
-              final pos = c.nowCameraPosition;
-              mapProvider.updateCamera(pos);
+              mapProvider.updateCamera(c.nowCameraPosition);
             },
           ),
 
-          // ================= 상단 UI 오버레이 =================
+          // ===== 상단 UI =====
           Positioned.fill(
             child: Column(
               children: [
                 SizedBox(height: padding.top + 16),
-
-                // -------- 검색바 + 모드 버튼 --------
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: [
-                      // 검색바
                       Expanded(
                         child: Container(
                           height: 52,
@@ -308,7 +357,6 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // 라이트/다크 토글 아이콘 (현재는 모양만)
                       Container(
                         width: 40,
                         height: 40,
@@ -340,7 +388,10 @@ class _MapScreenState extends State<MapScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
@@ -354,86 +405,102 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                       child: Row(
                         children: [
-                          // 경로 타입 토글
-                          _RouteTypeButton(
-                            icon: Icons.directions_walk,
-                            label: '도보',
-                            isSelected: mapProvider.routeType == RouteType.walking,
-                            onTap: () => mapProvider.setRouteType(RouteType.walking),
+                          // 왼쪽: 3개의 경로 타입 버튼 (라벨 + "시간 · 거리")
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _RouteTypeButton(
+                                    icon: Icons.directions_walk,
+                                    label: '도보',
+                                    timeText: durationLabelFor(
+                                      RouteType.walking,
+                                    ),
+                                    distanceText: distanceLabelFor(
+                                      RouteType.walking,
+                                    ),
+                                    isSelected:
+                                        mapProvider.routeType ==
+                                            RouteType.walking,
+                                    onTap: () => mapProvider
+                                        .setRouteType(RouteType.walking),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: _RouteTypeButton(
+                                    icon: Icons.directions_car,
+                                    label: '자동차',
+                                    timeText: durationLabelFor(
+                                      RouteType.driving,
+                                    ),
+                                    distanceText: distanceLabelFor(
+                                      RouteType.driving,
+                                    ),
+                                    isSelected:
+                                        mapProvider.routeType ==
+                                            RouteType.driving,
+                                    onTap: () => mapProvider
+                                        .setRouteType(RouteType.driving),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: _RouteTypeButton(
+                                    icon: Icons.directions_transit,
+                                    label: '대중교통',
+                                    timeText: durationLabelFor(
+                                      RouteType.transit,
+                                    ),
+                                    distanceText: distanceLabelFor(
+                                      RouteType.transit,
+                                    ),
+                                    isSelected:
+                                        mapProvider.routeType ==
+                                            RouteType.transit,
+                                    onTap: () => mapProvider
+                                        .setRouteType(RouteType.transit),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(width: 6),
-                          _RouteTypeButton(
-                            icon: Icons.directions_car,
-                            label: '자동차',
-                            isSelected: mapProvider.routeType == RouteType.driving,
-                            onTap: () => mapProvider.setRouteType(RouteType.driving),
-                          ),
-                          const SizedBox(width: 6),
-                          _RouteTypeButton(
-                            icon: Icons.directions_transit,
-                            label: '대중교통',
-                            isSelected: mapProvider.routeType == RouteType.transit,
-                            onTap: () => mapProvider.setRouteType(RouteType.transit),
-                          ),
-                          const Spacer(),
-                          // 로딩 또는 경로 정보
-                          if (mapProvider.isLoadingRoute)
-                            const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Color(0xFFFF6B9D),
-                              ),
-                            )
-                          else if (mapProvider.routeSummary != null) ...[
-                            Icon(
-                              Icons.route,
-                              size: 16,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              mapProvider.routeSummary!.distanceText,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey.shade700,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(
-                              Icons.access_time,
-                              size: 16,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              mapProvider.routeSummary!.durationText,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey.shade700,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
+
                           const SizedBox(width: 8),
-                          // X 버튼
-                          GestureDetector(
-                            onTap: () => mapProvider.clearCourseRoute(),
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade200,
-                                shape: BoxShape.circle,
+
+                          // 오른쪽: 로딩 + 닫기 버튼
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              if (mapProvider.isLoadingRoute) ...[
+                                const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Color(0xFFFF6B9D),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                              ],
+                              GestureDetector(
+                                onTap: () => mapProvider.clearCourseRoute(),
+                                child: Container(
+                                  width: 26,
+                                  height: 26,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade200,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 16,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
                               ),
-                              child: Icon(
-                                Icons.close,
-                                size: 16,
-                                color: Colors.grey.shade700,
-                              ),
-                            ),
+                            ],
                           ),
                         ],
                       ),
@@ -444,12 +511,12 @@ class _MapScreenState extends State<MapScreen> {
                   Padding(
                     padding: const EdgeInsets.only(left: 24, right: 24),
                     child: Row(
-                      children: [
-                        const _CircleChip(icon: Icons.star_border),
-                        const SizedBox(width: 8),
-                        const _CircleChip(icon: Icons.navigation),
-                        const SizedBox(width: 8),
-                        const _ScoreChip(scoreText: '10.1'),
+                      children: const [
+                        _CircleChip(icon: Icons.star_border),
+                        SizedBox(width: 8),
+                        _CircleChip(icon: Icons.navigation),
+                        SizedBox(width: 8),
+                        _ScoreChip(scoreText: '10.1'),
                       ],
                     ),
                   ),
@@ -457,7 +524,206 @@ class _MapScreenState extends State<MapScreen> {
               ],
             ),
           ),
+
+          // ===== 하단 드래그 시트 =====
+          DraggableScrollableSheet(
+            initialChildSize: 0.2,
+            minChildSize: 0.2,
+            maxChildSize: 1.0,
+            builder: (ctx, scrollController) {
+              final isPlaceTab = _currentTab == _BottomTab.place;
+
+              return Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // 장소/경로 탭
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Container(
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF2F2F7),
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        padding: const EdgeInsets.all(3),
+                        child: Row(
+                          children: [
+                            _buildTabButton(
+                              label: "장소",
+                              selected: isPlaceTab,
+                              onTap: () => setState(() {
+                                _currentTab = _BottomTab.place;
+                              }),
+                            ),
+                            const SizedBox(width: 4),
+                            _buildTabButton(
+                              label: "경로",
+                              selected: !isPlaceTab,
+                              onTap: () => setState(() {
+                                _currentTab = _BottomTab.route;
+                              }),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // 탭 컨텐츠
+                    Expanded(
+                      child: ListView(
+                        controller: scrollController,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        children: [
+                          if (isPlaceTab) ...[
+                            const Text(
+                              '장소 기능 준비 중',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              '여기에 추천 장소 목록 등이 추가될 예정입니다.',
+                              style: TextStyle(fontSize: 13),
+                            ),
+                          ] else ...[
+                            if (allCourses.isEmpty) ...[
+                              const Text(
+                                '저장된 코스가 없어요.',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                '챗봇 탭에서 코스를 저장하면 여기에도 표시됩니다.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ] else ...[
+                              const Text(
+                                '저장된 코스',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+
+                              ...allCourses.map((course) {
+                                return GestureDetector(
+                                  onTap: () {
+                                    mapProvider.setCourseRoute(course);
+                                  },
+                                  child: Container(
+                                    margin:
+                                        const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF7F7FA),
+                                      borderRadius:
+                                          BorderRadius.circular(12),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          course.template,
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          '${course.date} · ${course.startTime} ~ ${course.endTime}',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ],
+      ),
+    );
+  }
+
+  // ================= 탭 버튼 빌더 =================
+  Widget _buildTabButton({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: selected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(15),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight:
+                  selected ? FontWeight.w600 : FontWeight.w500,
+              color: selected ? Colors.black87 : Colors.grey.shade600,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -547,41 +813,74 @@ class _ScoreChip extends StatelessWidget {
 class _RouteTypeButton extends StatelessWidget {
   final IconData icon;
   final String label;
+  final String timeText; // 소요 시간
+  final String distanceText; // 소요 거리
   final bool isSelected;
   final VoidCallback onTap;
 
   const _RouteTypeButton({
     required this.icon,
     required this.label,
+    required this.timeText,
+    required this.distanceText,
     required this.isSelected,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final baseTextColor =
+        isSelected ? Colors.white : Colors.grey.shade800;
+    final subTextColor =
+        isSelected ? Colors.white.withOpacity(0.9) : Colors.grey.shade600;
+
+    final infoText = '$timeText · $distanceText';
+
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFFF6B9D) : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(14),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isSelected ? Colors.white : Colors.grey.shade600,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: baseTextColor,
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w500,
+                      color: baseTextColor,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 4),
+            const SizedBox(height: 3),
             Text(
-              label,
+              infoText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: isSelected ? Colors.white : Colors.grey.shade600,
+                fontSize: 10,
+                color: subTextColor,
               ),
             ),
           ],

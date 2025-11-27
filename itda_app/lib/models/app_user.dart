@@ -9,6 +9,10 @@ class AppUser {
   final String? picture;  // profile image URL
   final String? coupleId; // null이면 아직 매칭 안된 상태
   final bool surveyDone;
+
+  // 🔹 새로 추가: 우리가 만난 날
+  final DateTime? firstMet;
+
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -25,6 +29,7 @@ class AppUser {
     this.gender,
     this.picture,
     this.coupleId,
+    this.firstMet,   // 🔹 여기 추가
     this.createdAt,
     this.updatedAt,
   });
@@ -41,6 +46,10 @@ class AppUser {
       picture: json['picture'] as String?,
       coupleId: json['couple_id'] as String?,
       surveyDone: json['survey_done'] as bool? ?? false,
+      // 🔹 first_met 파싱
+      firstMet: json['first_met'] != null
+          ? DateTime.tryParse(json['first_met'] as String)
+          : null,
       // created_at / updated_at 은 UserBase에만 있으니, 있으면 파싱하고 없으면 null
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'] as String)
@@ -63,6 +72,7 @@ class AppUser {
       'picture': picture,
       'couple_id': coupleId,
       'survey_done': surveyDone,
+      if (firstMet != null) 'first_met': firstMet!.toIso8601String(), // 🔹 추가
       if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
       if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
     };
@@ -78,6 +88,7 @@ class AppUser {
     String? picture,
     String? coupleId,
     bool? surveyDone,
+    DateTime? firstMet,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -91,6 +102,7 @@ class AppUser {
       picture: picture ?? this.picture,
       coupleId: coupleId ?? this.coupleId,
       surveyDone: surveyDone ?? this.surveyDone,
+      firstMet: firstMet ?? this.firstMet, // 🔹 추가
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

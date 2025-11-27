@@ -177,7 +177,8 @@ class UserService:
         user_id: str,
         nickname: Optional[str] = None,
         birthday: Optional[str] = None,
-        gender: Optional[str] = None
+        gender: Optional[str] = None,
+        first_met: Optional[str] = None,  # 추가 ("YYYY-MM-DD")
     ) -> Optional[Dict[str, Any]]:
         """
         Update user profile information
@@ -204,6 +205,8 @@ class UserService:
             update_data["birthday"] = birthday
         if gender is not None:
             update_data["gender"] = gender
+        if first_met is not None:                 # 추가
+            update_data["first_met"] = first_met  # ex) "2025-02-14"
 
         # If nothing to update, return current user
         if not update_data:

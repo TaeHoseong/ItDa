@@ -50,17 +50,33 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     const mainColor = Color(0xFFFD9180);
 
+    // 🔹 UserProvider에서 firstMet 가져와서 제목 텍스트 생성
+    final user = context.watch<UserProvider>().user;
+    String appBarTitle = '커플 채팅';
+
+    if (user?.firstMet != null) {
+      final firstMet = user!.firstMet!;
+      // 날짜만 비교하도록 정규화
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final startDate = DateTime(firstMet.year, firstMet.month, firstMet.day);
+
+      int days = today.difference(startDate).inDays + 1; // D+1 스타일
+      if (days < 1) days = 1; // 미래 날짜 방지용 안전장치
+
+      appBarTitle = '우리가 함께한 지 $days일';
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFFAF8F5),
       appBar: AppBar(
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0.5,
-        title: const Text(
-          '커플 채팅',
-          style: TextStyle(fontWeight: FontWeight.w600),
+        title: Text(
+          appBarTitle,
+          style: const TextStyle(fontWeight: FontWeight.w600),
         ),
-        // ✅ 여기: 우상단 빨간 동그라미 위치에 설정 아이콘
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
