@@ -1,9 +1,10 @@
-// lib/screens/couple_setup_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:itda_app/providers/user_provider.dart';
 import 'package:itda_app/main.dart';
+
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CoupleSetupScreen extends StatefulWidget {
   const CoupleSetupScreen({super.key});
@@ -51,17 +52,53 @@ class _CoupleSetupScreenState extends State<CoupleSetupScreen> {
     final userProvider = context.read<UserProvider>();
     final user = userProvider.user;
 
+    DateTime? firstMetToSave;
+
     if (user != null) {
-      // ✅ 일단 로컬 UserProvider만 업데이트 (백엔드 연동은 나중에 UserApiService로)
+      firstMetToSave = _firstMet ?? user.firstMet;
+
       final updated = user.copyWith(
         nickname: nickname.isNotEmpty ? nickname : user.nickname,
-        firstMet: _firstMet ?? user.firstMet,
+        firstMet: firstMetToSave,
       );
       userProvider.setUser(updated);
-    }
 
-    // TODO: 백엔드에도 first_met / nickname 저장하고 싶으면
-    // await UserApiService.updateProfile(nickname: ..., firstMet: ...);
+      final coupleId = user.coupleId;
+
+      if (coupleId != null && firstMetToSave != null) {
+        final supabase = Supabase.instance.client;
+
+        try {
+          // 날짜만 저장하고 싶으면 toIso8601String() 쓰거나 DateTime 그대로 넘겨도 됨
+          await supabase
+              .from('couples')
+              .update({
+                'first_met': firstMetToSave.toIso8601String(),
+              })
+              .eq('couple_id', coupleId);
+
+          // 필요하면 nickname도 couples 쪽에 같이 저장 가능:
+          // await supabase
+          //   .from('couples')
+          //   .update({
+          //     'first_met': firstMetToSave.toIso8601String(),
+          //     'nickname': nickname.isNotEmpty ? nickname : user.nickname,
+          //   })
+          //   .eq('couple_id', coupleId);
+
+        } catch (e, st) {
+          // 실패해도 앱 흐름은 막지 않고 로그만 남김
+          debugPrint('[CoupleSetupScreen] couples.first_met 업데이트 실패: $e\n$st');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('서버에 커플 정보를 저장하는 데 실패했어요. 나중에 다시 시도해 주세요.'),
+              ),
+            );
+          }
+        }
+      }
+    }
 
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
@@ -118,9 +155,7 @@ class _CoupleSetupScreenState extends State<CoupleSetupScreen> {
             children: [
               const SizedBox(height: 12),
               Text(
-                user?.nickname != null
-                    ? '${user!.nickname}님,'
-                    : '환영해요!',
+                user?.nickname != null ? '${user!.nickname}님,' : '환영해요!',
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
