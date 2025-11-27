@@ -123,11 +123,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFFAF8F5),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFFFD9180),
-        onPressed: () => _openAddCourseSheet(selectedDay),
-        child: const Icon(Icons.add_rounded, color: Colors.white),
-      ),
+      // floatingActionButton 제거됨
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.only(top: 4),
@@ -543,9 +539,9 @@ class _CalendarScreenState extends State<CalendarScreen> {
               fontWeight: FontWeight.w600,
             ),
           ),
-          content: Text(
+          content: const Text(
             '정말 이 코스를 삭제하시겠습니까?',
-            style: const TextStyle(fontSize: 15),
+            style: TextStyle(fontSize: 15),
           ),
           actions: [
             TextButton(
@@ -1323,9 +1319,9 @@ String _formatTime(TimeOfDay t) {
 
 // ====== 각 장소(slot)별 일기 entry (UI용, 로컬 파일 path 포함) ======
 class _SlotDiaryEntry {
-  final String? imagePath;   // 로컬 or URL
-  final int rating;          // 0~5점
-  final String comment;      // 한줄평
+  final String? imagePath; // 로컬 or URL
+  final int rating; // 0~5점
+  final String comment; // 한줄평
 
   const _SlotDiaryEntry({
     this.imagePath,

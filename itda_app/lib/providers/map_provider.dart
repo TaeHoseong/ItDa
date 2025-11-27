@@ -22,18 +22,21 @@ class MapProvider extends ChangeNotifier {
   double _zoom = 14.0;
 
   bool _initialized = false;
-  bool _hasPendingMove = false;  // 지도 탭 진입 시 이동 대기 플래그
+  bool _hasPendingMove = false; // 지도 탭 진입 시 이동 대기 플래그
   final List<MapMarker> _markers = [];
 
   // 데이트 코스 경로
   List<NLatLng>? _courseRoute;
-  List<List<NLatLng>>? _courseSegments;  // 구간별 경로
+  List<List<NLatLng>>? _courseSegments; // 구간별 경로
   List<CourseSlot>? _courseSlots;
 
   // 경로 타입 및 상태
   RouteType _routeType = RouteType.walking;
   bool _isLoadingRoute = false;
   RouteSummary? _routeSummary;
+
+  // 🔹 가장 최근 경로 요청 id (비동기 응답 레이스 방지용)
+  int _routeRequestId = 0;
 
   bool get isInitialized => _initialized;
   NLatLng get cameraTarget => _cameraTarget;
@@ -73,7 +76,6 @@ class MapProvider extends ChangeNotifier {
     _cameraTarget = position.target;
     _zoom = position.zoom;
     // 여기서는 굳이 notifyListeners() 안해도 됨
-    // (다음 빌드에서 initialCameraPosition에만 사용)
   }
 
   /// ScheduleProvider의 일정들로 마커 생성
@@ -82,31 +84,25 @@ class MapProvider extends ChangeNotifier {
     _markers.removeWhere((m) => m.id != 'city_hall');
 
     for (final course in courses) {
-      // DateCourse.date 는 String이므로, 가능하면 DateTime으로 파싱
       DateTime? courseDate;
       try {
         courseDate = DateTime.parse(course.date);
       } catch (_) {
-        // 파싱 실패하면 그냥 null로 두고, 아래에서 문자열 사용
+        // 파싱 실패 시 null
       }
-      final dateKey = courseDate?.millisecondsSinceEpoch.toString() ?? course.date;
+      final dateKey =
+          courseDate?.millisecondsSinceEpoch.toString() ?? course.date;
 
-      // 코스 안의 슬롯들 중 위치가 있는 슬롯만 마커로 추가
       for (int i = 0; i < course.slots.length; i++) {
         final slot = course.slots[i];
 
-        // lat/lng는 DateCourse가 아니라 CourseSlot에 있음
         final lat = slot.latitude;
         final lng = slot.longitude;
-
-        // 혹시 0,0 같은 더미 좌표를 걸러내고 싶으면 여기서 체크
-        // if (lat == 0 && lng == 0) continue;
 
         _markers.add(
           MapMarker(
             id: 'course_${dateKey}_slot_$i',
             position: NLatLng(lat, lng),
-            // 이모지 + 장소 이름 같이 보여주면 가독성 좋음
             caption: '${slot.emoji} ${slot.placeName}',
           ),
         );
@@ -120,12 +116,11 @@ class MapProvider extends ChangeNotifier {
     }
   }
 
-
   /// 특정 장소로 카메라 이동 (지도 탭 진입 시 실제 이동)
   void moveToPlace(double latitude, double longitude, {double zoom = 15.0}) {
     _cameraTarget = NLatLng(latitude, longitude);
     _zoom = zoom;
-    _hasPendingMove = true;  // 이동 대기 플래그 설정
+    _hasPendingMove = true; // 이동 대기 플래그 설정
     notifyListeners();
 
     if (kDebugMode) {
@@ -189,39 +184,59 @@ class MapProvider extends ChangeNotifier {
 
   /// 현재 코스에 대한 경로 로드
   Future<void> _loadRouteForCurrentCourse() async {
-    if (_courseSlots == null || _courseSlots!.length < 2) {
-      // 슬롯이 1개 이하면 직선 경로
-      if (_courseSlots != null && _courseSlots!.isNotEmpty) {
-        _courseRoute = _courseSlots!.map((slot) =>
-          NLatLng(slot.latitude, slot.longitude)
-        ).toList();
-        _courseSegments = null;
-        _routeSummary = null;
-      }
+    if (_courseSlots == null || _courseSlots!.isEmpty) {
+      // 코스 자체가 없으면 초기화
+      _courseRoute = null;
+      _courseSegments = null;
+      _routeSummary = null;
       notifyListeners();
       return;
     }
+
+    if (_courseSlots!.length < 2) {
+      // 슬롯이 1개 이하면 직선 경로만 사용 (summary 없음)
+      _courseRoute = _courseSlots!
+          .map((slot) => NLatLng(slot.latitude, slot.longitude))
+          .toList();
+      _courseSegments = null;
+      _routeSummary = null;
+      notifyListeners();
+      return;
+    }
+
+    // 🔹 이 시점의 타입과 요청 id를 캡처
+    final int requestId = ++_routeRequestId;
+    final RouteType requestType = _routeType;
 
     _isLoadingRoute = true;
     notifyListeners();
 
     try {
       // 슬롯 좌표 리스트 생성
-      final points = _courseSlots!.map((slot) =>
-        NLatLng(slot.latitude, slot.longitude)
-      ).toList();
+      final points = _courseSlots!
+          .map((slot) => NLatLng(slot.latitude, slot.longitude))
+          .toList();
 
       // Directions API 호출 (구간별)
       final segments = await DirectionsService.getMultiPointRoute(
         points,
-        type: _routeType,
+        type: requestType,
       );
+
+      // 🔹 최신 요청이 아니면 결과 무시
+      if (requestId != _routeRequestId || requestType != _routeType) {
+        if (kDebugMode) {
+          print(
+              '⚠️ 오래된 경로 응답 버림 (requestId=$requestId, latest=$_routeRequestId, type=$requestType, current=$_routeType)');
+        }
+        return;
+      }
 
       if (segments.isNotEmpty) {
         // 구간별 경로 저장
         _courseSegments = segments.map((s) => s.path).toList();
 
-        // 전체 경로 합치기 (기존 호환성)
+        // 전체 경로 합치기 + 총 거리/시간 합산
         final combinedPath = <NLatLng>[];
         int totalDistance = 0;
         int totalDuration = 0;
@@ -243,7 +258,8 @@ class MapProvider extends ChangeNotifier {
         );
 
         if (kDebugMode) {
-          print('🗺️ 경로 로드 완료: ${_routeSummary!.distanceText}, ${_routeSummary!.durationText}');
+          print(
+              '🗺️ 경로 로드 완료(type=$requestType): ${_routeSummary!.distanceText}, ${_routeSummary!.durationText}');
         }
       } else {
         // API 실패 시 직선 경로 fallback
@@ -255,19 +271,30 @@ class MapProvider extends ChangeNotifier {
         }
       }
     } catch (e) {
+      // 🔹 에러도 오래된 요청이면 무시
+      if (requestId != _routeRequestId) {
+        if (kDebugMode) {
+          print('⚠️ 오래된 경로 요청 에러 무시 (requestId=$requestId): $e');
+        }
+        return;
+      }
+
       if (kDebugMode) {
         print('❌ 경로 로드 오류: $e');
       }
-      // 오류 시 직선 경로
-      _courseRoute = _courseSlots!.map((slot) =>
-        NLatLng(slot.latitude, slot.longitude)
-      ).toList();
+      // 오류 시 직선 경로 fallback
+      _courseRoute = _courseSlots!
+          .map((slot) => NLatLng(slot.latitude, slot.longitude))
+          .toList();
       _courseSegments = null;
       _routeSummary = null;
+    } finally {
+      // 🔹 최신 요청에 대해서만 로딩 플래그 내려줌
+      if (requestId == _routeRequestId) {
+        _isLoadingRoute = false;
+        notifyListeners();
+      }
     }
-
-    _isLoadingRoute = false;
-    notifyListeners();
   }
 
   /// 데이트 코스 경로 초기화
@@ -276,6 +303,8 @@ class MapProvider extends ChangeNotifier {
     _courseSegments = null;
     _courseSlots = null;
     _routeSummary = null;
+    _routeRequestId++; // 🔹 기존 진행 중인 요청들은 모두 "구버전"으로 취급
+    _isLoadingRoute = false;
     _markers.removeWhere((m) => m.id.startsWith('course_'));
     notifyListeners();
 

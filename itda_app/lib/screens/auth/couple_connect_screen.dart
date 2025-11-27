@@ -7,6 +7,9 @@ import 'package:itda_app/providers/user_provider.dart';
 import 'package:itda_app/main.dart';
 import 'package:itda_app/services/user_api_service.dart';
 
+// 추가: 커플 매칭 후 설정 화면
+import '../couple_setup_screen.dart';
+
 // ===================== 공통: 대문자 포맷터 =====================
 class UpperCaseTextFormatter extends TextInputFormatter {
   @override
@@ -274,10 +277,10 @@ class _GenerateCodeScreenState extends State<GenerateCodeScreen> {
         const SnackBar(content: Text('매칭이 완료되었습니다!')),
       );
 
-      // 3) 메인 화면으로 이동
+      // 3) ✅ 메인으로 가지 말고, 커플 설정 화면으로 이동
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const MainScreen()),
+        MaterialPageRoute(builder: (_) => const CoupleSetupScreen()),
         (route) => false,
       );
     } catch (e) {
@@ -540,9 +543,10 @@ class _EnterCodeScreenState extends State<EnterCodeScreen> {
         const SnackBar(content: Text('커플 연동이 완료되었습니다!')),
       );
 
+      // 4) ✅ 메인 대신 커플 설정 화면으로 이동
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const MainScreen()),
+        MaterialPageRoute(builder: (_) => const CoupleSetupScreen()),
         (route) => false,
       );
     } catch (e) {
