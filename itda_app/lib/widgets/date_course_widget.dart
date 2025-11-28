@@ -5,12 +5,16 @@ import '../models/date_course.dart';
 class DateCourseWidget extends StatelessWidget {
   final DateCourse course;
   final VoidCallback? onAddToSchedule;
+  final VoidCallback? onShare;
+  final bool onChat;
   final Function(int slotIndex)? onRegenerateSlot;
 
   const DateCourseWidget({
     Key? key,
     required this.course,
     this.onAddToSchedule,
+    this.onShare,
+    this.onChat = false,
     this.onRegenerateSlot,
   }) : super(key: key);
 
@@ -43,17 +47,34 @@ class DateCourseWidget extends StatelessWidget {
             const SizedBox(height: 16),
 
             // 일정에 추가 버튼
-            if (onAddToSchedule != null)
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: onAddToSchedule,
-                  icon: const Icon(Icons.add),
-                  label: const Text('일정에 추가'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+            // 일정에 추가 + 공유 버튼
+            if (onAddToSchedule != null) 
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: onAddToSchedule,
+                      icon: const Icon(Icons.add),
+                      label: const Text('일정에 추가'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
                   ),
-                ),
+                  if (!onChat) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onShare,   
+                        icon: const Icon(Icons.share),
+                        label: const Text('공유'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ]
+                ],
               ),
           ],
         ),
@@ -239,24 +260,26 @@ class DateCourseWidget extends StatelessWidget {
                   ],
 
                   // 재생성 버튼
-                  if (onRegenerateSlot != null) ...[
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      height: 32,
-                      child: OutlinedButton.icon(
-                        onPressed: () => onRegenerateSlot!(slotIndex),
-                        icon: const Icon(Icons.refresh, size: 16),
-                        label: const Text(
-                          '다른 장소',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          side: BorderSide(color: Colors.grey[400]!),
+                  if (!onChat) ...[
+                    if (onRegenerateSlot != null) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 32,
+                        child: OutlinedButton.icon(
+                          onPressed: () => onRegenerateSlot!(slotIndex),
+                          icon: const Icon(Icons.refresh, size: 16),
+                          label: const Text(
+                            '다른 장소',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            side: BorderSide(color: Colors.grey[400]!),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ]
                 ],
               ),
             ),
