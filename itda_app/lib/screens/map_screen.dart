@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/course_provider.dart';
-import '../services/directions_service.dart'; // 유지
+import '../services/directions_service.dart'; // RouteType, RouteSummary
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -26,14 +26,35 @@ class _MapScreenState extends State<MapScreen> {
 
   _BottomTab _currentTab = _BottomTab.place;
 
-  // 🔹 경로 타입별로 한 번 계산된 소요 시간/거리 캐시
+  // 🔹 검색 모드 플래그
+  bool _isSearchMode = false;
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+
+  // 예시용 최근 검색어
+  final List<String> _recentKeywords = [
+    '국제캠',
+    '연세대학교 신촌캠퍼스',
+    '홍대입구역',
+    '카페',
+  ];
+
+  // 🔹 경로 타입별 캐시
   final Map<RouteType, String> _cachedDuration = {};
   final Map<RouteType, String> _cachedDistance = {};
 
-  // 🔹 MapProvider 상태 변화 감지용 (로딩 상태 트래킹)
+  // 🔹 MapProvider 상태 변화 감지용
   bool _prevIsLoadingRoute = false;
   RouteSummary? _prevRouteSummary;
 
+  static const List<Color> _segmentColors = [
+    Color(0xFFD4654F),
+    Color(0xFFFFA78F),
+    Color(0xFFFD9180), // themePink (기본)
+    Color(0xFFE36E58),
+    Color(0xFFFFC8B4), // 매우 라이트 (부드러운 느낌)
+  ];
+/*
   static const List<Color> _segmentColors = [
     Color(0xFFFF6B9D),
     Color(0xFFE91E63),
@@ -41,11 +62,10 @@ class _MapScreenState extends State<MapScreen> {
     Color(0xFFF50057),
     Color(0xFFFF80AB),
   ];
-
+*/
   @override
   void initState() {
     super.initState();
-    // MapProvider 리스너 등록
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final mapProvider = context.read<MapProvider>();
       mapProvider.addListener(_onMapProviderChanged);
@@ -56,15 +76,15 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
-    // 리스너 제거
     try {
       context.read<MapProvider>().removeListener(_onMapProviderChanged);
     } catch (_) {}
+    _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
   }
 
-  /// 🔹 MapProvider 변경 시 호출
-  /// - "경로 로딩이 끝난 시점"에만 캐시를 갱신
+  /// MapProvider 변경 시 호출 → 경로 계산 끝났을 때 캐시 갱신
   void _onMapProviderChanged() {
     if (!mounted) return;
     final mapProvider = context.read<MapProvider>();
@@ -73,7 +93,6 @@ class _MapScreenState extends State<MapScreen> {
     final RouteSummary? summary = mapProvider.routeSummary;
     final RouteType type = mapProvider.routeType;
 
-    // 이전에는 로딩 중이었는데, 지금은 로딩이 끝났고, summary가 새로 생겼을 때만 캐시 갱신
     final bool loadingJustFinished =
         _prevIsLoadingRoute && !isLoading && summary != null;
 
@@ -93,7 +112,7 @@ class _MapScreenState extends State<MapScreen> {
     _prevRouteSummary = summary;
   }
 
-  // ================= 마커 및 폴리라인 함수 =================
+  // ================= 마커 및 폴리라인 =================
 
   Future<void> _addMarkersToMap(
       NaverMapController controller, List<MapMarker> markers) async {
@@ -139,7 +158,7 @@ class _MapScreenState extends State<MapScreen> {
         final polyline = NPolylineOverlay(
           id: 'fallback_route',
           coords: fallbackRoute,
-          color: const Color(0xFFFF6B9D),
+          color: const Color(0xFFFD9180),
           width: 5,
         );
         await controller.addOverlay(polyline);
@@ -175,6 +194,152 @@ class _MapScreenState extends State<MapScreen> {
     return true;
   }
 
+  // ================= Search overlay =================
+
+  Widget _buildSearchOverlay(EdgeInsets padding) {
+    return Positioned.fill(
+      child: Material(
+        color: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 지도 모드 검색바와 동일한 위치
+            SizedBox(height: padding.top + 16),
+
+            // 검색 입력창 + 뒤로가기
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                height: 52,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF2F2F7),
+                  borderRadius: BorderRadius.circular(26),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: () {
+                        setState(() => _isSearchMode = false);
+                        FocusScope.of(context).unfocus();
+                      },
+                      child: const Icon(
+                        Icons.arrow_back_ios_new,
+                        size: 22,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        focusNode: _searchFocusNode,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          border: InputBorder.none,
+                          hintText: '장소, 버스, 지하철, 주소 검색',
+                          hintStyle: TextStyle(
+                            color: Color(0xFF8E8E93),
+                            fontSize: 16,
+                          ),
+                        ),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.black87,
+                        ),
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: (v) {
+                          debugPrint('검색: $v');
+                          // TODO: 실제 검색 API 붙이기
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(
+                      Icons.mic_none,
+                      size: 22,
+                      color: Colors.black87,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // 카테고리 칩들
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  _buildSearchChip("최근검색", true),
+                  const SizedBox(width: 8),
+                  _buildSearchChip("예약", false),
+                  _buildSearchChip("장소", false),
+                  _buildSearchChip("버스", false),
+                  _buildSearchChip("경로", false),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: const Text(
+                "최근 검색",
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // 최근 검색 리스트
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: _recentKeywords.length,
+                itemBuilder: (_, i) {
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.history, size: 22),
+                    title: Text(_recentKeywords[i]),
+                    trailing: const Icon(Icons.close, size: 20),
+                    onTap: () {
+                      // TODO: 항목 눌렀을 때 검색 반영
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchChip(String label, bool selected) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: selected ? Colors.black : const Color(0xFFF2F2F7),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: selected ? Colors.white : Colors.black,
+        ),
+      ),
+    );
+  }
+
   // ================= build =================
 
   @override
@@ -184,15 +349,11 @@ class _MapScreenState extends State<MapScreen> {
     final navigationProvider = context.watch<NavigationProvider>();
     final courseProvider = context.watch<CourseProvider>();
 
-    // 날짜 상관 없이, 저장된 모든 코스
     final allCourses = courseProvider.allCourses;
 
-    // 버튼 안에서 보여줄 시간/거리 라벨 (캐시 우선)
     String durationLabelFor(RouteType type) {
       final cached = _cachedDuration[type];
-      if (cached != null && cached.isNotEmpty) {
-        return cached;
-      }
+      if (cached != null && cached.isNotEmpty) return cached;
 
       if (mapProvider.routeType == type) {
         if (mapProvider.isLoadingRoute) return '시간 계산 중';
@@ -205,9 +366,7 @@ class _MapScreenState extends State<MapScreen> {
 
     String distanceLabelFor(RouteType type) {
       final cached = _cachedDistance[type];
-      if (cached != null && cached.isNotEmpty) {
-        return cached;
-      }
+      if (cached != null && cached.isNotEmpty) return cached;
 
       if (mapProvider.routeType == type) {
         if (mapProvider.isLoadingRoute) return '거리 계산 중';
@@ -273,7 +432,7 @@ class _MapScreenState extends State<MapScreen> {
     // ================= UI =================
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFFFAF8F5),
       body: Stack(
         children: [
           // ===== NAVER MAP =====
@@ -313,7 +472,7 @@ class _MapScreenState extends State<MapScreen> {
             },
           ),
 
-          // ===== 상단 UI =====
+          // ===== 상단 UI (지도 모드 검색바) =====
           Positioned.fill(
             child: Column(
               children: [
@@ -322,37 +481,52 @@ class _MapScreenState extends State<MapScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Row(
                     children: [
+                      // 지도 모드에서의 검색바 (네이버지도 스타일, 클릭 시 전체 검색 모드로 전환)
                       Expanded(
-                        child: Container(
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(26),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.08),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 16),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.search,
-                                color: Colors.grey.shade600,
-                              ),
-                              const SizedBox(width: 8),
-                              const Text(
-                                '장소, 주소 검색',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Color.fromRGBO(60, 60, 67, 0.6),
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() => _isSearchMode = true);
+                            Future.delayed(
+                              const Duration(milliseconds: 100),
+                              () {
+                                if (mounted) {
+                                  FocusScope.of(context)
+                                      .requestFocus(_searchFocusNode);
+                                }
+                              },
+                            );
+                          },
+                          child: Container(
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(26),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.08),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.search,
+                                  color: Colors.grey.shade600,
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  '장소, 주소 검색',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Color.fromRGBO(60, 60, 67, 0.6),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -405,7 +579,6 @@ class _MapScreenState extends State<MapScreen> {
                       ),
                       child: Row(
                         children: [
-                          // 왼쪽: 3개의 경로 타입 버튼 (라벨 + "시간 · 거리")
                           Expanded(
                             child: Row(
                               children: [
@@ -413,15 +586,12 @@ class _MapScreenState extends State<MapScreen> {
                                   child: _RouteTypeButton(
                                     icon: Icons.directions_walk,
                                     label: '도보',
-                                    timeText: durationLabelFor(
-                                      RouteType.walking,
-                                    ),
-                                    distanceText: distanceLabelFor(
-                                      RouteType.walking,
-                                    ),
-                                    isSelected:
-                                        mapProvider.routeType ==
-                                            RouteType.walking,
+                                    timeText:
+                                        durationLabelFor(RouteType.walking),
+                                    distanceText:
+                                        distanceLabelFor(RouteType.walking),
+                                    isSelected: mapProvider.routeType ==
+                                        RouteType.walking,
                                     onTap: () => mapProvider
                                         .setRouteType(RouteType.walking),
                                   ),
@@ -431,15 +601,12 @@ class _MapScreenState extends State<MapScreen> {
                                   child: _RouteTypeButton(
                                     icon: Icons.directions_car,
                                     label: '자동차',
-                                    timeText: durationLabelFor(
-                                      RouteType.driving,
-                                    ),
-                                    distanceText: distanceLabelFor(
-                                      RouteType.driving,
-                                    ),
-                                    isSelected:
-                                        mapProvider.routeType ==
-                                            RouteType.driving,
+                                    timeText:
+                                        durationLabelFor(RouteType.driving),
+                                    distanceText:
+                                        distanceLabelFor(RouteType.driving),
+                                    isSelected: mapProvider.routeType ==
+                                        RouteType.driving,
                                     onTap: () => mapProvider
                                         .setRouteType(RouteType.driving),
                                   ),
@@ -449,15 +616,12 @@ class _MapScreenState extends State<MapScreen> {
                                   child: _RouteTypeButton(
                                     icon: Icons.directions_transit,
                                     label: '대중교통',
-                                    timeText: durationLabelFor(
-                                      RouteType.transit,
-                                    ),
-                                    distanceText: distanceLabelFor(
-                                      RouteType.transit,
-                                    ),
-                                    isSelected:
-                                        mapProvider.routeType ==
-                                            RouteType.transit,
+                                    timeText:
+                                        durationLabelFor(RouteType.transit),
+                                    distanceText:
+                                        distanceLabelFor(RouteType.transit),
+                                    isSelected: mapProvider.routeType ==
+                                        RouteType.transit,
                                     onTap: () => mapProvider
                                         .setRouteType(RouteType.transit),
                                   ),
@@ -465,10 +629,7 @@ class _MapScreenState extends State<MapScreen> {
                               ],
                             ),
                           ),
-
                           const SizedBox(width: 8),
-
-                          // 오른쪽: 로딩 + 닫기 버튼
                           Column(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.end,
@@ -479,7 +640,7 @@ class _MapScreenState extends State<MapScreen> {
                                   height: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Color(0xFFFF6B9D),
+                                    color: Color(0xFFFD9180),
                                   ),
                                 ),
                                 const SizedBox(height: 4),
@@ -507,7 +668,6 @@ class _MapScreenState extends State<MapScreen> {
                     ),
                   ),
                 ] else ...[
-                  // -------- 기본 상단 아이콘/칩 --------
                   Padding(
                     padding: const EdgeInsets.only(left: 24, right: 24),
                     child: Row(
@@ -536,9 +696,8 @@ class _MapScreenState extends State<MapScreen> {
               return Container(
                 decoration: const BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.vertical(
-                    top: Radius.circular(24),
-                  ),
+                  borderRadius:
+                      BorderRadius.vertical(top: Radius.circular(24)),
                 ),
                 child: Column(
                   children: [
@@ -635,7 +794,6 @@ class _MapScreenState extends State<MapScreen> {
                                 ),
                               ),
                               const SizedBox(height: 8),
-
                               ...allCourses.map((course) {
                                 return GestureDetector(
                                   onTap: () {
@@ -684,6 +842,9 @@ class _MapScreenState extends State<MapScreen> {
               );
             },
           ),
+
+          // ===== 검색 모드 오버레이 =====
+          if (_isSearchMode) _buildSearchOverlay(padding),
         ],
       ),
     );
@@ -718,8 +879,7 @@ class _MapScreenState extends State<MapScreen> {
             label,
             style: TextStyle(
               fontSize: 13,
-              fontWeight:
-                  selected ? FontWeight.w600 : FontWeight.w500,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
               color: selected ? Colors.black87 : Colors.grey.shade600,
             ),
           ),
@@ -829,8 +989,7 @@ class _RouteTypeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final baseTextColor =
-        isSelected ? Colors.white : Colors.grey.shade800;
+    final baseTextColor = isSelected ? Colors.white : Colors.grey.shade800;
     final subTextColor =
         isSelected ? Colors.white.withOpacity(0.9) : Colors.grey.shade600;
 
@@ -842,7 +1001,7 @@ class _RouteTypeButton extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFFF6B9D) : Colors.grey.shade100,
+          color: isSelected ? const Color(0xFFFD9180) : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Column(
