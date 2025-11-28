@@ -7,6 +7,7 @@ import '../providers/persona_chat_provider.dart';
 import '../providers/course_provider.dart';
 import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../providers/chat_provider.dart';
 import '../widgets/date_course_widget.dart';
 
 class PersonaScreen extends StatefulWidget {
@@ -782,6 +783,7 @@ class _DateCourseDisplayState extends State<_DateCourseDisplay> {
               duration: const Duration(seconds: 2),
             ),
           );
+          
         } catch (e) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -792,6 +794,17 @@ class _DateCourseDisplayState extends State<_DateCourseDisplay> {
             ),
           );
         }
+      },
+      onShare: () {
+        final chat = context.read<ChatProvider>();
+        chat.sendCourse(widget.course);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("코스를 채팅에 공유했어요!")),
+        );
+        
+        final navigationProvider = context.read<NavigationProvider>();
+        navigationProvider.navigateToChat();
       },
     );
   }

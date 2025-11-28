@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/user_provider.dart';
 import '../models/chat_message.dart';
+import '../widgets/date_course_widget.dart';
 import 'settings_screen.dart'; // ✅ 설정 화면 import
 
 class ChatScreen extends StatefulWidget {
@@ -239,6 +240,22 @@ class _ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (message.course != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
+        child: DateCourseWidget(
+          course: message.course!,
+          onChat: true,
+          onAddToSchedule: () {
+            // 일정 추가 버튼 누른 경우 (원하면 구현)
+          },
+          onRegenerateSlot: (index) {
+            // 재추천 구현 가능
+          },
+        ),
+      );
+    }
+
     final align = isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start;
     final color = isMine ? const Color(0xFFFD9180) : Colors.white;
     final textColor = isMine ? Colors.white : Colors.black87;
