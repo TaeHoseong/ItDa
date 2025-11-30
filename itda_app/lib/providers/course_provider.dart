@@ -552,7 +552,7 @@ class CourseProvider extends ChangeNotifier {
   }
 
   /// 한 코스에 대한 diary upsert (슬롯 리스트 전체)
-  Future<void> upsertDiaryForCourse({
+  Future<Map<String, dynamic>?> upsertDiaryForCourse({
     required DateCourse course,
     required List<DiarySlotEntry> slots,
   }) async {
@@ -575,17 +575,17 @@ class CourseProvider extends ChangeNotifier {
     notifyListeners();
 
     // 피드백 학습: 별점 기반 커플 페르소나 업데이트
-    FeedbackApiService.recalculatePersona();
+    return await FeedbackApiService.recalculatePersona();
   }
 
   /// 한 코스의 diary 삭제
-  Future<void> deleteDiaryForCourse(String courseId) async {
+  Future<Map<String, dynamic>?> deleteDiaryForCourse(String courseId) async {
     await supabase.from('diary').delete().eq('course_id', courseId);
     _diariesByCourseId.remove(courseId);
     notifyListeners();
 
     // 피드백 학습: 일기 삭제 시 페르소나 재계산 (원래대로 복원)
-    FeedbackApiService.recalculatePersona();
+    return await FeedbackApiService.recalculatePersona();
   }
 
   // =====================

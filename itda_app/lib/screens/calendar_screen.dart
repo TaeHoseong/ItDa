@@ -11,6 +11,9 @@ import 'package:image_picker/image_picker.dart';
 import '../providers/course_provider.dart';
 import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../providers/navigation_provider.dart';
+import '../providers/user_provider.dart';
+import '../models/user_persona.dart';
 import 'diary_read_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
@@ -614,7 +617,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
               onPressed: () async {
                 final courseProvider = context.read<CourseProvider>();
                 try {
-                  await courseProvider.deleteDiaryForCourse(course.id!);
+                  final result = await courseProvider.deleteDiaryForCourse(course.id!);
+                  
+                  if (result != null && result['new_persona'] != null && mounted) {
+                    try {
+                      final List<dynamic> newPersonaList = result['new_persona'];
+                      if (newPersonaList.length == _personaKeys.length) {
+                        final Map<String, dynamic> personaMap = {};
+                        for (int i = 0; i < _personaKeys.length; i++) {
+                          personaMap[_personaKeys[i]] = newPersonaList[i];
+                        }
+                        final newPersona = UserPersona.fromJson(personaMap);
+                        context.read<UserProvider>().setCouplePersona(newPersona);
+                        debugPrint('Couple Persona updated (delete)');
+                      }
+                    } catch (e) {
+                      debugPrint('페르소나 업데이트 실패 (삭제): $e');
+                    }
+                  }
+
                   if (!mounted) return;
                   Navigator.of(ctx).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -1175,6 +1196,35 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               borderRadius: BorderRadius.circular(999),
                             ),
                           ),
+                          child: const Text(
+                            '저장',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // 🔸 페르소나 차원 키 순서 (Backend SurveyUpdate 스키마와 일치해야 함)
+  static const _personaKeys = [
+    'food_cafe', 'culture_art', 'activity_sports', 'nature_healing', 'craft_experience', 'shopping',
+    'quiet', 'romantic', 'trendy', 'private_vibe', 'artistic', 'energetic',
+    'passive_enjoyment', 'active_participation', 'social_bonding', 'relaxation_focused',
+    'indoor_ratio', 'crowdedness_expected', 'photo_worthiness', 'scenic_view'
+  ];
+
+  // ... (existing code) ...
+
                           onPressed: () async {
                             if (course.id == null) return;
 
@@ -1218,38 +1268,45 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               );
                             }
 
-                            await courseProvider.upsertDiaryForCourse(
+                            final result = await courseProvider.upsertDiaryForCourse(
                               course: course,
                               slots: slotsToSave,
                             );
 
+                            // 🔸 페르소나 업데이트 처리
+                            if (result != null && result['new_persona'] != null && mounted) {
+                              try {
+                                final List<dynamic> newPersonaList = result['new_persona'];
+                                if (newPersonaList.length == _personaKeys.length) {
+                                  final Map<String, dynamic> personaMap = {};
+                                  for (int i = 0; i < _personaKeys.length; i++) {
+                                    personaMap[_personaKeys[i]] = newPersonaList[i];
+                                  }
+                                  
+                                  final newPersona = UserPersona.fromJson(personaMap);
+                                  context.read<UserProvider>().setCouplePersona(newPersona);
+                                  debugPrint('Couple Persona updated in UserProvider');
+                                }
+                              } catch (e) {
+                                debugPrint('페르소나 업데이트 실패: $e');
+                              }
+                            }
+
                             if (!mounted) return;
                             Navigator.of(ctx).pop();
+                            
+                            // 메시지 수정
+                            String message = '📝 장소별 데이트 일기가 저장되었습니다';
+                            if (result != null && result['new_persona'] != null) {
+                              message += '\n(커플 페르소나가 업데이트되었습니다!)';
+                            }
+                            
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content:
-                                    Text('📝 장소별 데이트 일기가 저장되었습니다'),
+                              SnackBar(
+                                content: Text(message),
                               ),
                             );
                           },
-                          child: const Text(
-                            '저장',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
 
   // ===== Day 셀 =====
   Widget _buildDayCell({
