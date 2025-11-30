@@ -24,6 +24,13 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
+  // 🔸 페르소나 차원 키 순서 (Backend SurveyUpdate 스키마와 일치해야 함)
+  static const _personaKeys = [
+    'food_cafe', 'culture_art', 'activity_sports', 'nature_healing', 'craft_experience', 'shopping',
+    'quiet', 'romantic', 'trendy', 'private_vibe', 'artistic', 'energetic',
+    'passive_enjoyment', 'active_participation', 'social_bonding', 'relaxation_focused',
+    'indoor_ratio', 'crowdedness_expected', 'photo_worthiness', 'scenic_view'
+  ];
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
@@ -1196,35 +1203,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               borderRadius: BorderRadius.circular(999),
                             ),
                           ),
-                          child: const Text(
-                            '저장',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  // 🔸 페르소나 차원 키 순서 (Backend SurveyUpdate 스키마와 일치해야 함)
-  static const _personaKeys = [
-    'food_cafe', 'culture_art', 'activity_sports', 'nature_healing', 'craft_experience', 'shopping',
-    'quiet', 'romantic', 'trendy', 'private_vibe', 'artistic', 'energetic',
-    'passive_enjoyment', 'active_participation', 'social_bonding', 'relaxation_focused',
-    'indoor_ratio', 'crowdedness_expected', 'photo_worthiness', 'scenic_view'
-  ];
-
-  // ... (existing code) ...
-
                           onPressed: () async {
                             if (course.id == null) return;
 
@@ -1273,40 +1251,47 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               slots: slotsToSave,
                             );
 
-                            // 🔸 페르소나 업데이트 처리
-                            if (result != null && result['new_persona'] != null && mounted) {
-                              try {
-                                final List<dynamic> newPersonaList = result['new_persona'];
-                                if (newPersonaList.length == _personaKeys.length) {
-                                  final Map<String, dynamic> personaMap = {};
-                                  for (int i = 0; i < _personaKeys.length; i++) {
-                                    personaMap[_personaKeys[i]] = newPersonaList[i];
-                                  }
-                                  
-                                  final newPersona = UserPersona.fromJson(personaMap);
-                                  context.read<UserProvider>().setCouplePersona(newPersona);
-                                  debugPrint('Couple Persona updated in UserProvider');
+                            if (!mounted) return;
+
+                            // 🔹 페르소나 업데이트 로직
+                            final rawPersona = result?['new_persona'];
+                            if (rawPersona != null && rawPersona is List) {
+                              final List<double> features = rawPersona
+                                  .map((e) => (e as num).toDouble())
+                                  .toList();
+
+                              if (features.length == 20) {
+                                final Map<String, double> personaMap = {};
+                                for (int i = 0; i < 20; i++) {
+                                  personaMap[_personaKeys[i]] = features[i];
                                 }
-                              } catch (e) {
-                                debugPrint('페르소나 업데이트 실패: $e');
+                                final newPersona = UserPersona.fromJson(personaMap);
+                                context.read<UserProvider>().setCouplePersona(newPersona);
                               }
                             }
 
-                            if (!mounted) return;
                             Navigator.of(ctx).pop();
-                            
-                            // 메시지 수정
-                            String message = '📝 장소별 데이트 일기가 저장되었습니다';
-                            if (result != null && result['new_persona'] != null) {
-                              message += '\n(커플 페르소나가 업데이트되었습니다!)';
-                            }
-                            
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(message),
-                              ),
-                            );
                           },
+                          child: const Text(
+                            '저장',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+
+
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 
   // ===== Day 셀 =====
   Widget _buildDayCell({
