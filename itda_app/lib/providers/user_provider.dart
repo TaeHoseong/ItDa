@@ -1,6 +1,7 @@
 // lib/providers/user_provider.dart
 import 'package:flutter/foundation.dart';
 import '../models/app_user.dart';
+import '../models/user_persona.dart';
 
 class UserProvider extends ChangeNotifier {
   AppUser? _user;
@@ -30,8 +31,17 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  UserPersona? _couplePersona;
+  UserPersona? get couplePersona => _couplePersona;
+
+  void setCouplePersona(UserPersona? persona) {
+    _couplePersona = persona;
+    notifyListeners();
+  }
+
   void clear() {
     _user = null;
+    _couplePersona = null;
     notifyListeners();
   }
 }

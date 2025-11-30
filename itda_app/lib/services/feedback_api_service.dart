@@ -11,12 +11,12 @@ class FeedbackApiService {
 
   /// 커플 페르소나 재계산 요청
   /// 일기 저장/수정/삭제 후 호출
-  static Future<bool> recalculatePersona() async {
+  static Future<Map<String, dynamic>?> recalculatePersona() async {
     try {
       final token = await _storage.read(key: 'access_token');
       if (token == null) {
         debugPrint('[FeedbackAPI] No access token');
-        return false;
+        return null;
       }
 
       final response = await http.post(
@@ -31,14 +31,14 @@ class FeedbackApiService {
         final data = jsonDecode(response.body);
         debugPrint('[FeedbackAPI] Persona recalculated: ${data['message']}');
         debugPrint('[FeedbackAPI] Feedback count: ${data['feedback_count']}');
-        return true;
+        return data;
       } else {
         debugPrint('[FeedbackAPI] Error: ${response.statusCode} - ${response.body}');
-        return false;
+        return null;
       }
     } catch (e) {
       debugPrint('[FeedbackAPI] Exception: $e');
-      return false;
+      return null;
     }
   }
 

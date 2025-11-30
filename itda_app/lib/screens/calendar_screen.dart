@@ -11,6 +11,9 @@ import 'package:image_picker/image_picker.dart';
 import '../providers/course_provider.dart';
 import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
+import '../providers/navigation_provider.dart';
+import '../providers/user_provider.dart';
+import '../models/user_persona.dart';
 import 'diary_read_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
@@ -21,6 +24,13 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
+  // 🔸 페르소나 차원 키 순서 (Backend SurveyUpdate 스키마와 일치해야 함)
+  static const _personaKeys = [
+    'food_cafe', 'culture_art', 'activity_sports', 'nature_healing', 'craft_experience', 'shopping',
+    'quiet', 'romantic', 'trendy', 'private_vibe', 'artistic', 'energetic',
+    'passive_enjoyment', 'active_participation', 'social_bonding', 'relaxation_focused',
+    'indoor_ratio', 'crowdedness_expected', 'photo_worthiness', 'scenic_view'
+  ];
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
@@ -614,7 +624,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
               onPressed: () async {
                 final courseProvider = context.read<CourseProvider>();
                 try {
-                  await courseProvider.deleteDiaryForCourse(course.id!);
+                  final result = await courseProvider.deleteDiaryForCourse(course.id!);
+                  
+                  if (result != null && result['new_persona'] != null && mounted) {
+                    try {
+                      final List<dynamic> newPersonaList = result['new_persona'];
+                      if (newPersonaList.length == _personaKeys.length) {
+                        final Map<String, dynamic> personaMap = {};
+                        for (int i = 0; i < _personaKeys.length; i++) {
+                          personaMap[_personaKeys[i]] = newPersonaList[i];
+                        }
+                        final newPersona = UserPersona.fromJson(personaMap);
+                        context.read<UserProvider>().setCouplePersona(newPersona);
+                        debugPrint('Couple Persona updated (delete)');
+                      }
+                    } catch (e) {
+                      debugPrint('페르소나 업데이트 실패 (삭제): $e');
+                    }
+                  }
+
                   if (!mounted) return;
                   Navigator.of(ctx).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -1218,19 +1246,31 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               );
                             }
 
-                            await courseProvider.upsertDiaryForCourse(
+                            final result = await courseProvider.upsertDiaryForCourse(
                               course: course,
                               slots: slotsToSave,
                             );
 
                             if (!mounted) return;
+
+                            // 🔹 페르소나 업데이트 로직
+                            final rawPersona = result?['new_persona'];
+                            if (rawPersona != null && rawPersona is List) {
+                              final List<double> features = rawPersona
+                                  .map((e) => (e as num).toDouble())
+                                  .toList();
+
+                              if (features.length == 20) {
+                                final Map<String, double> personaMap = {};
+                                for (int i = 0; i < 20; i++) {
+                                  personaMap[_personaKeys[i]] = features[i];
+                                }
+                                final newPersona = UserPersona.fromJson(personaMap);
+                                context.read<UserProvider>().setCouplePersona(newPersona);
+                              }
+                            }
+
                             Navigator.of(ctx).pop();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content:
-                                    Text('📝 장소별 데이트 일기가 저장되었습니다'),
-                              ),
-                            );
                           },
                           child: const Text(
                             '저장',
@@ -1239,6 +1279,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
                             ),
                           ),
                         ),
+
+
                       ],
                     ),
                   ],
