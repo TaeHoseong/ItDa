@@ -196,7 +196,7 @@ class _MapScreenState extends State<MapScreen> {
 
   // ================= Search overlay =================
 
-  Widget _buildSearchOverlay(EdgeInsets padding) {
+  Widget _buildSearchOverlay(EdgeInsets padding, MapProvider mapProvider) {
     return Positioned.fill(
       child: Material(
         color: Colors.white,
@@ -250,7 +250,7 @@ class _MapScreenState extends State<MapScreen> {
                         textInputAction: TextInputAction.search,
                         onSubmitted: (v) {
                           debugPrint('검색: $v');
-                          // TODO: 실제 검색 API 붙이기
+                          context.read<MapProvider>().searchPlaces(v);
                         },
                       ),
                     ),
@@ -298,23 +298,57 @@ class _MapScreenState extends State<MapScreen> {
 
             const SizedBox(height: 12),
 
-            // 최근 검색 리스트
+            // 최근 검색 리스트 OR 검색 결과 리스트
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _recentKeywords.length,
-                itemBuilder: (_, i) {
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.history, size: 22),
-                    title: Text(_recentKeywords[i]),
-                    trailing: const Icon(Icons.close, size: 20),
-                    onTap: () {
-                      // TODO: 항목 눌렀을 때 검색 반영
-                    },
-                  );
-                },
-              ),
+              child: mapProvider.isSearching
+                  ? const Center(child: CircularProgressIndicator())
+                  : mapProvider.searchResults.isNotEmpty
+                      ? ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: mapProvider.searchResults.length,
+                          itemBuilder: (_, i) {
+                            final item = mapProvider.searchResults[i];
+                            // Naver API response structure: title, address, etc.
+                            // item['title'] might contain HTML tags like <b>...</b>
+                            String title = item['title'] ?? '';
+                            title = title.replaceAll('<b>', '').replaceAll('</b>', '');
+                            final address = item['address'] ?? item['roadAddress'] ?? '';
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.location_on_outlined, size: 22),
+                              title: Text(title),
+                              subtitle: Text(
+                                address,
+                                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                              ),
+                              onTap: () {
+                                // 1. 마커 추가 및 상태 업데이트 (카메라 이동 포함)
+                                mapProvider.addSearchMarker(item);
+                                
+                                // 2. 검색 모드 종료 및 키보드 닫기
+                                setState(() {
+                                  _isSearchMode = false;
+                                });
+                                FocusScope.of(context).unfocus();
+                              },
+                            );
+                          },
+                        )
+                      : ListView.builder(
+                          itemCount: _recentKeywords.length,
+                          itemBuilder: (_, i) {
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.history, size: 22),
+                              title: Text(_recentKeywords[i]),
+                              trailing: const Icon(Icons.close, size: 20),
+                              onTap: () {
+                                _searchController.text = _recentKeywords[i];
+                                context.read<MapProvider>().searchPlaces(_recentKeywords[i]);
+                              },
+                            );
+                          },
+                        ),
             ),
           ],
         ),
@@ -844,7 +878,7 @@ class _MapScreenState extends State<MapScreen> {
           ),
 
           // ===== 검색 모드 오버레이 =====
-          if (_isSearchMode) _buildSearchOverlay(padding),
+          if (_isSearchMode) _buildSearchOverlay(padding, mapProvider),
         ],
       ),
     );

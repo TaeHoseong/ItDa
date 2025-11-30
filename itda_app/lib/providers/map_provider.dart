@@ -3,6 +3,7 @@ import 'package:flutter_naver_map/flutter_naver_map.dart';
 
 import '../models/date_course.dart';
 import '../services/directions_service.dart';
+import '../services/search_api_service.dart';
 
 class MapMarker {
   final String id;
@@ -311,5 +312,75 @@ class MapProvider extends ChangeNotifier {
     if (kDebugMode) {
       print('MapProvider: 코스 경로 초기화');
     }
+  }
+
+  // =====================
+  // 장소 검색
+  // =====================
+  List<dynamic> _searchResults = [];
+  bool _isSearching = false;
+
+  List<dynamic> get searchResults => _searchResults;
+  bool get isSearching => _isSearching;
+
+  Future<void> searchPlaces(String query) async {
+    if (query.isEmpty) return;
+
+    _isSearching = true;
+    notifyListeners();
+
+    try {
+      // SearchApiService는 나중에 import 추가 필요
+      // 여기서는 동적으로 import하거나 상단에 추가해야 함.
+      // 일단 메서드 내에서 해결하거나 상단 import를 추가하는 별도 edit 필요.
+      // 편의상 이 파일 상단에 import 추가했다고 가정하고 진행.
+      final results = await SearchApiService.searchPlaces(query);
+      _searchResults = results;
+    } catch (e) {
+      debugPrint('장소 검색 실패: $e');
+      _searchResults = [];
+    } finally {
+      _isSearching = false;
+      notifyListeners();
+    }
+  }
+
+  void clearSearchResults() {
+    _searchResults = [];
+    notifyListeners();
+  }
+
+  /// 검색 결과 선택 시 마커 추가
+  void addSearchMarker(Map<String, dynamic> item) {
+    final lat = item['latitude'] as double?;
+    final lng = item['longitude'] as double?;
+    final rawTitle = item['title'] as String?;
+    final title = rawTitle?.replaceAll(RegExp(r'<[^>]*>'), '') ?? '검색 결과';
+
+    if (lat == null || lng == null) {
+      debugPrint('MapProvider: 좌표 누락 - lat=$lat, lng=$lng, item=$item');
+      return;
+    }
+
+    // 기존 검색 마커 제거 (id가 'search_'로 시작하는 것들)
+    _markers.removeWhere((m) => m.id.startsWith('search_'));
+
+    // 새 마커 추가
+    _markers.add(
+      MapMarker(
+        id: 'search_${item['mapx']}', // unique id
+        position: NLatLng(lat, lng),
+        caption: title,
+      ),
+    );
+    
+    debugPrint('MapProvider: 검색 결과 마커 추가 - $title ($lat, $lng)');
+
+    // 카메라 이동을 위해 타겟 업데이트 (UI에서 참조 가능)
+    _cameraTarget = NLatLng(lat, lng);
+    _zoom = 16.0; // 검색 결과는 상세하게 보여줌
+    _hasPendingMove = true; // 지도 이동 트리거
+    
+    notifyListeners();
   }
 }
