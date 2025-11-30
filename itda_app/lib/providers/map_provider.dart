@@ -9,11 +9,13 @@ class MapMarker {
   final String id;
   final NLatLng position;
   final String? caption;
+  final dynamic data; // CourseSlot or Search Result Map
 
   MapMarker({
     required this.id,
     required this.position,
     this.caption,
+    this.data,
   });
 }
 
@@ -105,6 +107,7 @@ class MapProvider extends ChangeNotifier {
             id: 'course_${dateKey}_slot_$i',
             position: NLatLng(lat, lng),
             caption: '${slot.emoji} ${slot.placeName}',
+            data: slot,
           ),
         );
       }
@@ -163,6 +166,7 @@ class MapProvider extends ChangeNotifier {
           id: 'course_$i',
           position: NLatLng(slot.latitude, slot.longitude),
           caption: '${i + 1}. ${slot.placeName}',
+          data: slot,
         ),
       );
     }
@@ -330,10 +334,6 @@ class MapProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // SearchApiService는 나중에 import 추가 필요
-      // 여기서는 동적으로 import하거나 상단에 추가해야 함.
-      // 일단 메서드 내에서 해결하거나 상단 import를 추가하는 별도 edit 필요.
-      // 편의상 이 파일 상단에 import 추가했다고 가정하고 진행.
       final results = await SearchApiService.searchPlaces(query);
       _searchResults = results;
     } catch (e) {
@@ -368,14 +368,13 @@ class MapProvider extends ChangeNotifier {
     // 새 마커 추가
     _markers.add(
       MapMarker(
-        id: 'search_${item['mapx']}', // unique id
+        id: 'search_${item['mapx']}',
         position: NLatLng(lat, lng),
         caption: title,
+        data: item,
       ),
     );
     
-    debugPrint('MapProvider: 검색 결과 마커 추가 - $title ($lat, $lng)');
-
     // 카메라 이동을 위해 타겟 업데이트 (UI에서 참조 가능)
     _cameraTarget = NLatLng(lat, lng);
     _zoom = 16.0; // 검색 결과는 상세하게 보여줌
