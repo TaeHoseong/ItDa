@@ -8,6 +8,7 @@ import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/course_provider.dart';
 import '../services/directions_service.dart'; // RouteType, RouteSummary
+import '../services/location_service.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -149,6 +150,53 @@ class _MapScreenState extends State<MapScreen> {
 
     // 알림 표시 후 상태 초기화
     context.read<MapProvider>().clearTransitFallbackNotice();
+  }
+
+  // ================= GPS 위치 =================
+
+  /// GPS 위치 권한 확인 및 현재 위치 오버레이 초기화
+  Future<void> _initLocationOverlay(NaverMapController controller) async {
+    final position = await LocationService.getCurrentPosition();
+
+    if (position != null) {
+      final locationOverlay = await controller.getLocationOverlay();
+      locationOverlay.setPosition(NLatLng(position.latitude, position.longitude));
+      locationOverlay.setIsVisible(true);
+    }
+  }
+
+  /// 현재 위치로 카메라 이동
+  Future<void> _moveToCurrentLocation() async {
+    if (_mapController == null) return;
+
+    final position = await LocationService.getCurrentPosition(forceRefresh: true);
+
+    if (position == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('현재 위치를 가져올 수 없습니다')),
+        );
+      }
+      return;
+    }
+
+    // 카메라 이동
+    _isProgrammaticMove = true;
+    await _mapController!.updateCamera(
+      NCameraUpdate.fromCameraPosition(
+        NCameraPosition(
+          target: NLatLng(position.latitude, position.longitude),
+          zoom: 15.0,
+        ),
+      ),
+    );
+
+    // 위치 오버레이 업데이트
+    final locationOverlay = await _mapController!.getLocationOverlay();
+    locationOverlay.setPosition(NLatLng(position.latitude, position.longitude));
+    locationOverlay.setIsVisible(true);
+
+    debugPrint('📍 현재 위치로 이동: ${position.latitude}, ${position.longitude}');
   }
 
   // ================= 마커 및 폴리라인 =================
@@ -682,10 +730,17 @@ class _MapScreenState extends State<MapScreen> {
                 target: mapProvider.cameraTarget,
                 zoom: mapProvider.zoom,
               ),
+              // 현재 위치 버튼 활성화
+              locationButtonEnable: true,
+              // 현재 위치 오버레이 표시 (파란 점)
+              contentPadding: const EdgeInsets.only(bottom: 80),
             ),
             onMapReady: (controller) async {
               _mapController = controller;
               mapProvider.ensureInitialized();
+
+              // 현재 GPS 위치 가져와서 오버레이 표시
+              await _initLocationOverlay(controller);
 
               if (mapProvider.markers.isNotEmpty) {
                 await _addMarkersToMap(controller, mapProvider.markers);
@@ -771,24 +826,28 @@ class _MapScreenState extends State<MapScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.wb_sunny_outlined,
-                          color: Colors.black87,
-                          size: 22,
+                      // 현재 위치 버튼
+                      GestureDetector(
+                        onTap: _moveToCurrentLocation,
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.08),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.my_location,
+                            color: Color(0xFFFD9180),
+                            size: 22,
+                          ),
                         ),
                       ),
                     ],
