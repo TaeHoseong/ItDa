@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/chat_message.dart';
-
+import '../models/date_course.dart';
 class ChatProvider extends ChangeNotifier {
   final SupabaseClient _supabase;
 
@@ -145,6 +145,43 @@ class ChatProvider extends ChangeNotifier {
       _error = null;
     } catch (e) {
       _error = '메시지 전송 실패: $e';
+    } finally {
+      _isSending = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> sendCourse(DateCourse course) async {
+    if (_coupleId == null || _currentUserId == null) return;
+
+    _isSending = true;
+    notifyListeners();
+
+    try {
+      final now = DateTime.now().toUtc();
+
+      final newMessage = ChatMessage(
+        id: '${now.microsecondsSinceEpoch}_${_currentUserId!}',
+        senderId: _currentUserId!,
+        content: '',
+        course: course,    // 여기에 course 담김
+        createdAt: now,
+      );
+
+      // 로컬 추가 (UI 즉시 반영)
+      _messages = [..._messages, newMessage];
+      notifyListeners();
+
+      // Supabase 업데이트
+      final payload = _messages.map((m) => m.toJson()).toList();
+
+      await _supabase
+          .from('couples')
+          .update({'chat_history': payload})
+          .eq('couple_id', _coupleId!);
+
+    } catch (e) {
+      _error = '코스 공유 실패: $e';
     } finally {
       _isSending = false;
       notifyListeners();

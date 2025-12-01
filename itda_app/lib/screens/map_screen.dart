@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 
+import '../models/date_course.dart'; // CourseSlot
 import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/course_provider.dart';
@@ -124,11 +126,178 @@ class _MapScreenState extends State<MapScreen> {
       );
 
       marker.setOnTapListener((overlay) {
-        debugPrint('마커 클릭: ${marker.info}');
+        _showMarkerInfoSheet(m);
       });
 
       await controller.addOverlay(marker);
     }
+  }
+
+  void _showMarkerInfoSheet(MapMarker marker) {
+    final data = marker.data;
+    String title = marker.caption ?? '장소 정보';
+    String address = '';
+    String category = '';
+    String? telephone;
+    String? link;
+    double? score;
+
+    if (data is Map<String, dynamic>) {
+      // 검색 결과
+      title = (data['title'] as String?)?.replaceAll(RegExp(r'<[^>]*>'), '') ?? title;
+      address = data['address'] ?? data['roadAddress'] ?? '';
+      category = data['category'] ?? '';
+      telephone = data['telephone'];
+      link = data['link'];
+    } else if (data is CourseSlot) {
+      // 코스 슬롯
+      title = data.placeName;
+      address = data.placeAddress ?? '';
+      category = data.slotType;
+      score = data.score;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 1. 타이틀 및 카테고리
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  if (category.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        category,
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+
+              // 2. 주소
+              if (address.isNotEmpty)
+                Row(
+                  children: [
+                    const Icon(Icons.location_on_outlined, size: 16, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        address,
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  ],
+                ),
+              
+              // 3. 전화번호 (검색 결과인 경우)
+              if (telephone != null && telephone.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.phone, size: 16, color: Colors.grey),
+                    const SizedBox(width: 4),
+                    Text(
+                      telephone,
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ],
+
+              // 4. 평점 (코스 슬롯인 경우)
+              if (score != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.star, size: 16, color: Colors.amber),
+                    const SizedBox(width: 4),
+                    Text(
+                      '추천 점수: ${score.toStringAsFixed(1)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
+
+              const SizedBox(height: 24),
+
+              // 5. 액션 버튼
+              Row(
+                children: [
+                  // 찜하기 버튼
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        // TODO: 위시리스트 추가 기능 구현
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('위시리스트 기능 준비 중입니다.')),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF6F61),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('찜하기'),
+                    ),
+                  ),
+                  // 상세보기 버튼 (link가 있을 때만)
+                  if (link != null && link.isNotEmpty) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          // URL 열기
+                          launchUrlString(link!);
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFFF6F61),
+                          side: const BorderSide(color: Color(0xFFFF6F61)),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('상세보기'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   Future<void> _addCoursePolylines(
@@ -196,7 +365,7 @@ class _MapScreenState extends State<MapScreen> {
 
   // ================= Search overlay =================
 
-  Widget _buildSearchOverlay(EdgeInsets padding) {
+  Widget _buildSearchOverlay(EdgeInsets padding, MapProvider mapProvider) {
     return Positioned.fill(
       child: Material(
         color: Colors.white,
@@ -250,7 +419,7 @@ class _MapScreenState extends State<MapScreen> {
                         textInputAction: TextInputAction.search,
                         onSubmitted: (v) {
                           debugPrint('검색: $v');
-                          // TODO: 실제 검색 API 붙이기
+                          context.read<MapProvider>().searchPlaces(v);
                         },
                       ),
                     ),
@@ -298,23 +467,57 @@ class _MapScreenState extends State<MapScreen> {
 
             const SizedBox(height: 12),
 
-            // 최근 검색 리스트
+            // 최근 검색 리스트 OR 검색 결과 리스트
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: _recentKeywords.length,
-                itemBuilder: (_, i) {
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.history, size: 22),
-                    title: Text(_recentKeywords[i]),
-                    trailing: const Icon(Icons.close, size: 20),
-                    onTap: () {
-                      // TODO: 항목 눌렀을 때 검색 반영
-                    },
-                  );
-                },
-              ),
+              child: mapProvider.isSearching
+                  ? const Center(child: CircularProgressIndicator())
+                  : mapProvider.searchResults.isNotEmpty
+                      ? ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: mapProvider.searchResults.length,
+                          itemBuilder: (_, i) {
+                            final item = mapProvider.searchResults[i];
+                            // Naver API response structure: title, address, etc.
+                            // item['title'] might contain HTML tags like <b>...</b>
+                            String title = item['title'] ?? '';
+                            title = title.replaceAll('<b>', '').replaceAll('</b>', '');
+                            final address = item['address'] ?? item['roadAddress'] ?? '';
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.location_on_outlined, size: 22),
+                              title: Text(title),
+                              subtitle: Text(
+                                address,
+                                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                              ),
+                              onTap: () {
+                                // 1. 마커 추가 및 상태 업데이트 (카메라 이동 포함)
+                                mapProvider.addSearchMarker(item);
+                                
+                                // 2. 검색 모드 종료 및 키보드 닫기
+                                setState(() {
+                                  _isSearchMode = false;
+                                });
+                                FocusScope.of(context).unfocus();
+                              },
+                            );
+                          },
+                        )
+                      : ListView.builder(
+                          itemCount: _recentKeywords.length,
+                          itemBuilder: (_, i) {
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: const Icon(Icons.history, size: 22),
+                              title: Text(_recentKeywords[i]),
+                              trailing: const Icon(Icons.close, size: 20),
+                              onTap: () {
+                                _searchController.text = _recentKeywords[i];
+                                context.read<MapProvider>().searchPlaces(_recentKeywords[i]);
+                              },
+                            );
+                          },
+                        ),
             ),
           ],
         ),
@@ -844,7 +1047,7 @@ class _MapScreenState extends State<MapScreen> {
           ),
 
           // ===== 검색 모드 오버레이 =====
-          if (_isSearchMode) _buildSearchOverlay(padding),
+          if (_isSearchMode) _buildSearchOverlay(padding, mapProvider),
         ],
       ),
     );

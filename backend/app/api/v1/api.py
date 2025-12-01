@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, persona, places, users, courses, match, feedback
+from app.api.v1.endpoints import auth, persona, places, users, courses, match, feedback, search
 
 api_router = APIRouter()
 
@@ -50,4 +50,11 @@ api_router.include_router(
     feedback.router,
     prefix="/feedback",
     tags=["feedback"]
+)
+
+# 검색
+api_router.include_router(
+    search.router,
+    prefix="/search",
+    tags=["search"]
 )

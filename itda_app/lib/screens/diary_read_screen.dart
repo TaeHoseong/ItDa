@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/date_course.dart';
+import '../models/date_course.dart';
+import '../models/user_persona.dart';
 import '../providers/course_provider.dart';
+import '../providers/user_provider.dart';
 
 class DiaryReadScreen extends StatelessWidget {
   final DateCourse course;
@@ -51,9 +54,35 @@ class DiaryReadScreen extends StatelessWidget {
                 );
 
                 if (confirm == true) {
-                  await context
+                  final result = await context
                       .read<CourseProvider>()
                       .deleteDiaryForCourse(course.id!);
+                  
+                  // 🔸 페르소나 업데이트 처리
+                  if (result != null && result['new_persona'] != null && context.mounted) {
+                    try {
+                      final List<dynamic> newPersonaList = result['new_persona'];
+                      // 페르소나 키 (Backend SurveyUpdate 스키마와 일치)
+                      const personaKeys = [
+                        'food_cafe', 'culture_art', 'activity_sports', 'nature_healing', 'craft_experience', 'shopping',
+                        'quiet', 'romantic', 'trendy', 'private_vibe', 'artistic', 'energetic',
+                        'passive_enjoyment', 'active_participation', 'social_bonding', 'relaxation_focused',
+                        'indoor_ratio', 'crowdedness_expected', 'photo_worthiness', 'scenic_view'
+                      ];
+
+                      if (newPersonaList.length == personaKeys.length) {
+                        final Map<String, dynamic> personaMap = {};
+                        for (int i = 0; i < personaKeys.length; i++) {
+                          personaMap[personaKeys[i]] = newPersonaList[i];
+                        }
+                        final newPersona = UserPersona.fromJson(personaMap);
+                        context.read<UserProvider>().setCouplePersona(newPersona);
+                        debugPrint('Couple Persona updated (delete from read screen)');
+                      }
+                    } catch (e) {
+                      debugPrint('페르소나 업데이트 실패 (삭제): $e');
+                    }
+                  }
                   if (context.mounted) {
                     Navigator.of(context).pop();
                     ScaffoldMessenger.of(context).showSnackBar(
