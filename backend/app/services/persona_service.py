@@ -64,18 +64,18 @@ class PersonaService:
             response_data = self._handle_update_info(session, intent)
 
         elif action == "recommend_place":
-            response_data = self._handle_recommend_place(session, intent, request.user_id)
+            response_data = self._handle_recommend_place(session, intent, request.user_id, request.user_lat, request.user_lng)
         elif action == "re_recommend_place":
-            response_data = self._handle_re_recommend_place(session, intent, request.user_id)
+            response_data = self._handle_re_recommend_place(session, intent, request.user_id, request.user_lat, request.user_lng)
         elif action == "select_place":
             response_data = await self._handle_select_place(session, intent)
         elif action == "generate_course":
-            response_data = self._handle_generate_course(session, intent, request.user_id)
+            response_data = self._handle_generate_course(session, intent, request.user_id, request.user_lat, request.user_lng)
         elif action == "view_schedule":
             response_data = self._handle_view_schedule(session, intent, request.user_id)
         elif action == "regenerate_course_slot":
             print(f"\n[ACTION] Calling _handle_regenerate_course_slot")
-            response_data = self._handle_regenerate_course_slot(session, intent, request.user_id)
+            response_data = self._handle_regenerate_course_slot(session, intent, request.user_id, request.user_lat, request.user_lng)
             print(f"[ACTION] Response data keys: {response_data.keys() if response_data else None}")
 
         # improved_message가 있으면 그걸 사용, 없으면 intent["message"] 사용
@@ -138,7 +138,7 @@ class PersonaService:
         missing = [field for field in required if not data.get(field)]
         return missing
 
-    def _handle_recommend_place(self, session: dict, intent: dict, user_id: str = None) -> dict:
+    def _handle_recommend_place(self, session: dict, intent: dict, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
         """장소 추천 처리"""
         specific_food = intent["extracted_data"]["food"]
         category = intent["extracted_data"]["category"]
@@ -147,17 +147,20 @@ class PersonaService:
         print(f"\n{'='*60}")
         print(f"[RECOMMENDATION START]")
         print(f"   User ID: {user_id}")
+        print(f"   User Location: ({user_lat}, {user_lng})")
         if extra_feature:
             print(f"   Extra Feature: {extra_feature}")
         print(f"{'='*60}\n")
 
-        # suggest_service를 통해 추천 장소 가져오기 (user_id 전달)
+        # suggest_service를 통해 추천 장소 가져오기 (user_id와 위치 전달)
         places = self.suggest_service.get_recommendations(
             user_id=user_id,
             category=category,
             specific_food=specific_food,
             extra_feature=extra_feature,
-            k=5
+            k=5,
+            user_lat=user_lat,
+            user_lng=user_lng
         )
 
         # 세션에 추천된 장소 저장 (장소 선택 시 사용)
@@ -180,20 +183,22 @@ class PersonaService:
             "count": len(places)
         }
 
-    def _handle_re_recommend_place(self, session, intent, user_id):
+    def _handle_re_recommend_place(self, session, intent, user_id, user_lat=None, user_lng=None):
         """이전 추천을 기반으로 재추천"""
 
         # 이전 추천에서 제외할 장소 리스트
         prev_places = [p["name"] for p in session["recommended_places"]]
 
-        # 새 추천 가져오기 (extra_feature도 유지)
+        # 새 추천 가져오기 (extra_feature와 위치도 유지)
         new_places = self.suggest_service.get_recommendations(
             user_id=user_id,
             last_recommend=prev_places,
             category=session["last_category"],
             specific_food=session["last_food"],
             extra_feature=session["last_extra_feature"],
-            k=5
+            k=5,
+            user_lat=user_lat,
+            user_lng=user_lng
         )
         print(f"{[p['name'] for p in new_places]}")
         # 세션 업데이트
@@ -300,7 +305,7 @@ class PersonaService:
                 "improved_message": improved_message
             }
 
-    def _handle_generate_course(self, session: dict, intent: dict, user_id: str = None) -> dict:
+    def _handle_generate_course(self, session: dict, intent: dict, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
         """데이트 코스 생성 처리"""
 
         # pending_data 초기화
@@ -341,15 +346,18 @@ class PersonaService:
         print(f"   Date: {date_str}")
         print(f"   Template: {template}")
         print(f"   Preferences: {preferences}")
+        print(f"   User Location: ({user_lat}, {user_lng})")
         print(f"{'='*60}\n")
 
         try:
-            # CourseService를 통해 코스 생성
+            # CourseService를 통해 코스 생성 (GPS 위치 전달)
             course = self.course_service.generate_date_course(
                 user_id=user_id,
                 date=date_str,
                 template=template,
-                preferences=preferences
+                preferences=preferences,
+                user_lat=user_lat,
+                user_lng=user_lng
             )
 
             # 세션에 생성된 코스 저장
@@ -416,9 +424,9 @@ class PersonaService:
                 "message": f"코스 생성 중 오류가 발생했습니다: {str(e)}"
             }
 
-    def _handle_regenerate_course_slot(self, session: dict, intent: dict, user_id: str = None) -> dict:
+    def _handle_regenerate_course_slot(self, session: dict, intent: dict, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
         """코스의 특정 슬롯 재생성 처리"""
-        
+
         # 세션에 저장된 코스 확인
         if "generated_course" not in session:
             return {
@@ -449,6 +457,7 @@ class PersonaService:
 
         print(f"\n{'='*60}")
         print(f"[REGENERATE SLOT] #{slot_index}")
+        print(f"   User Location: ({user_lat}, {user_lng})")
         if extra_feature:
             print(f"[EXTRA_FEATURE] {extra_feature}")
         print(f"{'='*60}\n")
@@ -456,14 +465,16 @@ class PersonaService:
         try:
             course = session["generated_course"]
 
-            # CourseService를 통해 슬롯 재생성
+            # CourseService를 통해 슬롯 재생성 (GPS 위치 전달)
             updated_course = self.course_service.regenerate_course_slot(
                 course=course,
                 slot_index=slot_index,
                 user_id=user_id,
                 category=category,
                 keyword=keyword,
-                extra_feature=extra_feature
+                extra_feature=extra_feature,
+                user_lat=user_lat,
+                user_lng=user_lng
             )
 
             # 세션에 업데이트된 코스 저장

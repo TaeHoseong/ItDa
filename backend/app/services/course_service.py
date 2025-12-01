@@ -66,7 +66,9 @@ class CourseService:
         user_id: str,
         date: str,
         template: str = "auto",
-        preferences: Optional[CoursePreferences] = None
+        preferences: Optional[CoursePreferences] = None,
+        user_lat: Optional[float] = None,
+        user_lng: Optional[float] = None
     ) -> DateCourse:
         """
         데이트 코스 생성 메인 함수
@@ -76,6 +78,8 @@ class CourseService:
             date: 날짜 (YYYY-MM-DD)
             template: 템플릿 이름 (auto면 페르소나 기반 자동 선택)
             preferences: 사용자 커스터마이징 설정
+            user_lat: 사용자 GPS 위도
+            user_lng: 사용자 GPS 경도
 
         Returns:
             DateCourse: 생성된 데이트 코스
@@ -86,6 +90,7 @@ class CourseService:
         print(f"   Date: {date}")
         print(f"   Template: {template}")
         print(f"   Preferences: {preferences}")
+        print(f"   User Location: ({user_lat}, {user_lng})")
         print(f"{'='*60}\n")
 
         # 1. 템플릿 선택
@@ -106,7 +111,11 @@ class CourseService:
 
         # 4. 각 슬롯별 장소 추천
         slots: List[CourseSlot] = []
+        # 첫 번째 슬롯은 사용자 현재 위치를 기준으로 거리 계산
         previous_location: Optional[Tuple[float, float]] = None
+        if user_lat is not None and user_lng is not None:
+            previous_location = (user_lat, user_lng)
+            print(f"📍 첫 번째 장소는 사용자 현재 위치 기준으로 추천")
         total_distance = 0.0
         used_places: List[str] = []  # 이미 사용된 장소 이름 추적
 
@@ -115,7 +124,9 @@ class CourseService:
                 user_id=user_id,
                 slot_config=config,
                 previous_location=previous_location,
-                exclude_places=used_places  # 중복 제외
+                exclude_places=used_places,  # 중복 제외
+                user_lat=user_lat,
+                user_lng=user_lng
             )
 
             if slot:
@@ -301,7 +312,9 @@ class CourseService:
         previous_location: Optional[Tuple[float, float]] = None,
         exclude_places: Optional[List[str]] = None,
         keyword: str = None,
-        extra_feature: str = None
+        extra_feature: str = None,
+        user_lat: Optional[float] = None,
+        user_lng: Optional[float] = None
     ) -> Optional[CourseSlot]:
         """
         특정 슬롯에 대한 장소 추천
@@ -313,6 +326,8 @@ class CourseService:
             exclude_places: 제외할 장소 이름 리스트 (중복 방지)
             keyword: 유저가 원하는 특정한 장소
             extra_feature: 추가 조건 (atmosphere_romantic, rating_high 등)
+            user_lat: 사용자 GPS 위도
+            user_lng: 사용자 GPS 경도
 
         Returns:
             CourseSlot: 추천된 슬롯 (장소 포함)
@@ -336,7 +351,9 @@ class CourseService:
                     specific_food=keyword,
                     extra_feature=extra_feature,
                     last_recommend=exclude_places,  # 이미 사용된 장소 제외
-                    k=k
+                    k=k,
+                    user_lat=user_lat,
+                    user_lng=user_lng
                 )
 
                 if places:
@@ -423,7 +440,9 @@ class CourseService:
         user_id: str = None,
         category: str = None,
         keyword: str = None,
-        extra_feature: str = None
+        extra_feature: str = None,
+        user_lat: Optional[float] = None,
+        user_lng: Optional[float] = None
     ) -> DateCourse:
         """
         코스의 특정 슬롯만 재생성
@@ -464,21 +483,25 @@ class CourseService:
         # 이미 사용된 장소들 (현재 슬롯 포함 - 같은 장소가 다시 나오지 않도록)
         exclude_places = [s.place_name for s in course.slots]
         print(f"   Excluding ALL current places: {exclude_places}")
-        print(f"[slot change] {slot_config["category"]} >> {new_category}")
-        # 이전 위치 (이전 슬롯이 있으면)
+        print(f"[slot change] {slot_config['category']} >> {new_category}")
+        # 이전 위치 (이전 슬롯이 있으면, 없으면 사용자 현재 위치)
         previous_location = None
         if slot_index > 0:
             prev_slot = course.slots[slot_index - 1]
             previous_location = (prev_slot.latitude, prev_slot.longitude)
+        elif user_lat is not None and user_lng is not None:
+            previous_location = (user_lat, user_lng)
 
-        # 새로운 장소 추천
+        # 새로운 장소 추천 (GPS 위치 전달)
         new_slot = self._recommend_for_slot(
             user_id=user_id,
             slot_config=slot_config,
             previous_location=previous_location,
             exclude_places=exclude_places,
             keyword=keyword,
-            extra_feature=extra_feature
+            extra_feature=extra_feature,
+            user_lat=user_lat,
+            user_lng=user_lng
         )
 
         if not new_slot:
