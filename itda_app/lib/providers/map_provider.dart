@@ -37,6 +37,7 @@ class MapProvider extends ChangeNotifier {
   RouteType _routeType = RouteType.walking;
   bool _isLoadingRoute = false;
   RouteSummary? _routeSummary;
+  bool _hasTransitFallback = false; // 대중교통 미지원으로 도보 fallback 발생 여부
 
   // 🔹 가장 최근 경로 요청 id (비동기 응답 레이스 방지용)
   int _routeRequestId = 0;
@@ -55,6 +56,7 @@ class MapProvider extends ChangeNotifier {
   RouteType get routeType => _routeType;
   bool get isLoadingRoute => _isLoadingRoute;
   RouteSummary? get routeSummary => _routeSummary;
+  bool get hasTransitFallback => _hasTransitFallback;
 
   /// 최초 1회 마커/상태 세팅
   void ensureInitialized() {
@@ -214,6 +216,7 @@ class MapProvider extends ChangeNotifier {
     final RouteType requestType = _routeType;
 
     _isLoadingRoute = true;
+    _hasTransitFallback = false; // 초기화
     notifyListeners();
 
     try {
@@ -241,10 +244,11 @@ class MapProvider extends ChangeNotifier {
         // 구간별 경로 저장
         _courseSegments = segments.map((s) => s.path).toList();
 
-        // 전체 경로 합치기 + 총 거리/시간 합산
+        // 전체 경로 합치기 + 총 거리/시간 합산 + fallback 감지
         final combinedPath = <NLatLng>[];
         int totalDistance = 0;
         int totalDuration = 0;
+        bool hasFallback = false;
 
         for (final segment in segments) {
           if (combinedPath.isNotEmpty && segment.path.isNotEmpty) {
@@ -254,6 +258,11 @@ class MapProvider extends ChangeNotifier {
           }
           totalDistance += segment.summary.distance;
           totalDuration += segment.summary.duration;
+
+          // 대중교통 fallback 감지
+          if (segment.isTransitFallback) {
+            hasFallback = true;
+          }
         }
 
         _courseRoute = combinedPath;
@@ -261,10 +270,14 @@ class MapProvider extends ChangeNotifier {
           distance: totalDistance,
           duration: totalDuration,
         );
+        _hasTransitFallback = hasFallback;
 
         if (kDebugMode) {
           print(
               '🗺️ 경로 로드 완료(type=$requestType): ${_routeSummary!.distanceText}, ${_routeSummary!.durationText}');
+          if (hasFallback) {
+            print('⚠️ 일부 구간 대중교통 미지원, 도보로 대체됨');
+          }
         }
       } else {
         // API 실패 시 직선 경로 fallback
@@ -308,6 +321,7 @@ class MapProvider extends ChangeNotifier {
     _courseSegments = null;
     _courseSlots = null;
     _routeSummary = null;
+    _hasTransitFallback = false;
     _routeRequestId++; // 🔹 기존 진행 중인 요청들은 모두 "구버전"으로 취급
     _isLoadingRoute = false;
     _markers.removeWhere((m) => m.id.startsWith('course_'));
@@ -316,6 +330,12 @@ class MapProvider extends ChangeNotifier {
     if (kDebugMode) {
       print('MapProvider: 코스 경로 초기화');
     }
+  }
+
+  /// 대중교통 fallback 알림 확인 완료 처리
+  void clearTransitFallbackNotice() {
+    _hasTransitFallback = false;
+    notifyListeners();
   }
 
   // =====================

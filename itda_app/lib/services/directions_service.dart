@@ -8,7 +8,7 @@ import '../secrets.dart';
 /// 경로 타입
 enum RouteType {
   driving,  // 자동차
-  walking,  // 도보 (현재 driving과 동일)
+  walking,  // 도보
   transit,  // 대중교통
 }
 
@@ -43,238 +43,380 @@ class RouteSummary {
 class RouteResult {
   final List<NLatLng> path;
   final RouteSummary summary;
+  final bool isTransitFallback; // 대중교통 미지원으로 도보 fallback 여부
 
-  RouteResult({required this.path, required this.summary});
+  RouteResult({
+    required this.path,
+    required this.summary,
+    this.isTransitFallback = false,
+  });
 }
 
-/// Directions API 서비스 (Naver + Google Directions API)
+/// Directions API 서비스 (Tmap API)
 class DirectionsService {
-  static const String _naverBaseUrl = 'https://maps.apigw.ntruss.com';
-  static const String _googleDirectionsUrl = 'https://maps.googleapis.com/maps/api/directions/json';
+  // Tmap API Base URLs
+  static const String _tmapBaseUrl = 'https://apis.openapi.sk.com';
 
-  /// 자동차 경로 조회 (Naver API)
+  /// 자동차 경로 조회 (Tmap API)
   static Future<RouteResult?> getDrivingRoute(
     NLatLng start,
     NLatLng end,
   ) async {
-    final url = Uri.parse('$_naverBaseUrl/map-direction/v1/driving').replace(
-      queryParameters: {
-        'start': '${start.longitude},${start.latitude}',
-        'goal': '${end.longitude},${end.latitude}',
-        'option': 'trafast',
-      },
-    );
+    final url = Uri.parse('$_tmapBaseUrl/tmap/routes?version=1&format=json');
 
     try {
       if (kDebugMode) {
-        print('🔑 Directions API 요청:');
-        print('   URL: $url');
-        print('   KEY_ID: $NAVER_API_KEY_ID');
-        print('   KEY: ${NAVER_API_KEY.substring(0, 5)}...${NAVER_API_KEY.substring(NAVER_API_KEY.length - 5)}');
+        print('🚗 Tmap 자동차 경로 API 요청:');
+        print('   출발: ${start.latitude}, ${start.longitude}');
+        print('   도착: ${end.latitude}, ${end.longitude}');
       }
 
-      final response = await http.get(
+      final response = await http.post(
         url,
         headers: {
-          'X-NCP-APIGW-API-KEY-ID': NAVER_API_KEY_ID,
-          'X-NCP-APIGW-API-KEY': NAVER_API_KEY,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'appKey': TMAP_APP_KEY,
         },
+        body: jsonEncode({
+          'startX': start.longitude.toString(),
+          'startY': start.latitude.toString(),
+          'endX': end.longitude.toString(),
+          'endY': end.latitude.toString(),
+          'reqCoordType': 'WGS84GEO',
+          'resCoordType': 'WGS84GEO',
+          'searchOption': '0', // 추천 경로
+        }),
       );
 
       if (response.statusCode != 200) {
         if (kDebugMode) {
-          print('❌ Directions API 오류: ${response.statusCode}');
+          print('❌ Tmap 자동차 API 오류: ${response.statusCode}');
           print('Response: ${response.body}');
         }
         return null;
       }
 
-      final data = jsonDecode(response.body);
-
-      if (data['code'] != 0) {
-        if (kDebugMode) {
-          print('❌ 경로를 찾을 수 없음: ${data['message']}');
-        }
-        return null;
-      }
-
-      final route = data['route']?['trafast']?[0];
-      if (route == null) return null;
-
-      final summary = route['summary'];
-      final pathCoords = route['path'] as List<dynamic>;
-
-      // [lng, lat] -> NLatLng 변환
-      final path = pathCoords.map((coord) {
-        return NLatLng(coord[1] as double, coord[0] as double);
-      }).toList();
-
-      return RouteResult(
-        path: path,
-        summary: RouteSummary(
-          distance: summary['distance'] as int,
-          duration: summary['duration'] as int,
-        ),
-      );
+      return _parseTmapRouteResponse(response.body);
     } catch (e) {
       if (kDebugMode) {
-        print('❌ Directions API 예외: $e');
+        print('❌ Tmap 자동차 API 예외: $e');
       }
       return null;
     }
   }
 
-  /// 도보 경로 조회 (Google API, 한국 미지원시 Naver fallback)
+  /// 도보 경로 조회 (Tmap Pedestrian API)
   static Future<RouteResult?> getWalkingRoute(
     NLatLng start,
     NLatLng end,
   ) async {
-    // Google 도보 경로 시도
-    final googleResult = await _getGoogleRoute(start, end, 'walking');
-    if (googleResult != null) {
-      return googleResult;
-    }
-
-    // Google 미지원 시 Naver 자동차 경로 + 도보 시간 재계산
-    if (kDebugMode) {
-      print('⚠️ Google 도보 미지원, Naver fallback 사용');
-    }
-    final naverResult = await getDrivingRoute(start, end);
-    if (naverResult == null) return null;
-
-    // 도보 시간으로 재계산 (분당 67m 기준, 약 4km/h)
-    final walkingDuration = (naverResult.summary.distance / 67 * 60000).round();
-
-    return RouteResult(
-      path: naverResult.path,
-      summary: RouteSummary(
-        distance: naverResult.summary.distance,
-        duration: walkingDuration,
-      ),
-    );
-  }
-
-  /// 대중교통 경로 조회 (Google API)
-  static Future<RouteResult?> getTransitRoute(
-    NLatLng start,
-    NLatLng end,
-  ) async {
-    return _getGoogleRoute(start, end, 'transit');
-  }
-
-  /// Google Directions API 공통 메서드 (GET 방식 - Legacy)
-  static Future<RouteResult?> _getGoogleRoute(
-    NLatLng start,
-    NLatLng end,
-    String mode,
-  ) async {
-    final url = Uri.parse(_googleDirectionsUrl).replace(
-      queryParameters: {
-        'origin': '${start.latitude},${start.longitude}',
-        'destination': '${end.latitude},${end.longitude}',
-        'mode': mode,
-        'key': GOOGLE_DIRECTIONS_API_KEY,
-        'language': 'ko',
-      },
-    );
+    final url =
+        Uri.parse('$_tmapBaseUrl/tmap/routes/pedestrian?version=1&format=json');
 
     try {
       if (kDebugMode) {
-        print('🔑 Google Directions API 요청 ($mode):');
-        print('   URL: $url');
+        print('🚶 Tmap 도보 경로 API 요청:');
+        print('   출발: ${start.latitude}, ${start.longitude}');
+        print('   도착: ${end.latitude}, ${end.longitude}');
       }
 
-      final response = await http.get(url);
+      final response = await http.post(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'appKey': TMAP_APP_KEY,
+        },
+        body: jsonEncode({
+          'startX': start.longitude.toString(),
+          'startY': start.latitude.toString(),
+          'endX': end.longitude.toString(),
+          'endY': end.latitude.toString(),
+          'startName': '출발지',
+          'endName': '도착지',
+          'reqCoordType': 'WGS84GEO',
+          'resCoordType': 'WGS84GEO',
+          'searchOption': '0', // 추천 경로
+        }),
+      );
 
       if (response.statusCode != 200) {
         if (kDebugMode) {
-          print('❌ Google API 오류: ${response.statusCode}');
+          print('❌ Tmap 도보 API 오류: ${response.statusCode}');
           print('Response: ${response.body}');
         }
         return null;
       }
 
-      final data = jsonDecode(response.body);
-
-      if (data['status'] != 'OK') {
-        if (kDebugMode) {
-          print('❌ Google 경로를 찾을 수 없음: ${data['status']}');
-          if (data['error_message'] != null) {
-            print('   에러: ${data['error_message']}');
-          }
-        }
-        return null;
-      }
-
-      final route = data['routes']?[0];
-      if (route == null) return null;
-
-      final leg = route['legs']?[0];
-      if (leg == null) return null;
-
-      // Polyline 디코딩하여 경로 좌표 추출
-      final overviewPolyline = route['overview_polyline']?['points'] as String?;
-      if (overviewPolyline == null) return null;
-
-      final path = _decodePolyline(overviewPolyline);
-
-      // 거리(미터)와 시간(밀리초) 추출
-      final distance = leg['distance']?['value'] as int? ?? 0;
-      final durationSeconds = leg['duration']?['value'] as int? ?? 0;
-      final duration = durationSeconds * 1000; // 초 → 밀리초
-
-      if (kDebugMode) {
-        print('✅ Google 경로 로드 성공: ${path.length}개 좌표, ${distance}m, ${duration}ms');
-      }
-
-      return RouteResult(
-        path: path,
-        summary: RouteSummary(
-          distance: distance,
-          duration: duration,
-        ),
-      );
+      return _parseTmapRouteResponse(response.body);
     } catch (e) {
       if (kDebugMode) {
-        print('❌ Google API 예외: $e');
+        print('❌ Tmap 도보 API 예외: $e');
       }
       return null;
     }
   }
 
-  /// Google Polyline 디코딩 (Encoded Polyline Algorithm)
-  static List<NLatLng> _decodePolyline(String encoded) {
-    final points = <NLatLng>[];
-    int index = 0;
-    int lat = 0;
-    int lng = 0;
+  /// 대중교통 경로 조회 (Tmap Transit API)
+  /// 대중교통 경로가 없으면 도보 경로로 fallback
+  static Future<RouteResult?> getTransitRoute(
+    NLatLng start,
+    NLatLng end,
+  ) async {
+    final url = Uri.parse('$_tmapBaseUrl/transit/routes');
 
-    while (index < encoded.length) {
-      // Latitude
-      int shift = 0;
-      int result = 0;
-      int byte;
-      do {
-        byte = encoded.codeUnitAt(index++) - 63;
-        result |= (byte & 0x1F) << shift;
-        shift += 5;
-      } while (byte >= 0x20);
-      lat += (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
+    try {
+      if (kDebugMode) {
+        print('🚌 Tmap 대중교통 경로 API 요청:');
+        print('   출발: ${start.latitude}, ${start.longitude}');
+        print('   도착: ${end.latitude}, ${end.longitude}');
+      }
 
-      // Longitude
-      shift = 0;
-      result = 0;
-      do {
-        byte = encoded.codeUnitAt(index++) - 63;
-        result |= (byte & 0x1F) << shift;
-        shift += 5;
-      } while (byte >= 0x20);
-      lng += (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
+      final response = await http.post(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'appKey': TMAP_APP_KEY,
+        },
+        body: jsonEncode({
+          'startX': start.longitude.toString(),
+          'startY': start.latitude.toString(),
+          'endX': end.longitude.toString(),
+          'endY': end.latitude.toString(),
+          'count': 1,
+          'lang': 0,
+          'format': 'json',
+        }),
+      );
 
-      points.add(NLatLng(lat / 1E5, lng / 1E5));
+      if (response.statusCode != 200) {
+        if (kDebugMode) {
+          print('❌ Tmap 대중교통 API 오류: ${response.statusCode}');
+          print('⚠️ 도보 경로로 fallback');
+        }
+        return _getWalkingRouteAsFallback(start, end);
+      }
+
+      final result = _parseTmapTransitResponse(response.body);
+
+      // 대중교통 경로가 없으면 도보 경로로 fallback
+      if (result == null) {
+        if (kDebugMode) {
+          print('⚠️ 대중교통 경로 없음, 도보 경로로 fallback');
+        }
+        return _getWalkingRouteAsFallback(start, end);
+      }
+
+      return result;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Tmap 대중교통 API 예외: $e');
+        print('⚠️ 도보 경로로 fallback');
+      }
+      return _getWalkingRouteAsFallback(start, end);
     }
+  }
 
-    return points;
+  /// 대중교통 fallback용 도보 경로 (isTransitFallback = true)
+  static Future<RouteResult?> _getWalkingRouteAsFallback(
+    NLatLng start,
+    NLatLng end,
+  ) async {
+    final result = await getWalkingRoute(start, end);
+    if (result == null) return null;
+
+    return RouteResult(
+      path: result.path,
+      summary: result.summary,
+      isTransitFallback: true,
+    );
+  }
+
+  /// Tmap 자동차/도보 경로 응답 파싱 (GeoJSON 형식)
+  static RouteResult? _parseTmapRouteResponse(String responseBody) {
+    try {
+      final data = jsonDecode(responseBody);
+      final features = data['features'] as List<dynamic>?;
+
+      if (features == null || features.isEmpty) {
+        if (kDebugMode) {
+          print('❌ Tmap 경로 응답에 features가 없음');
+        }
+        return null;
+      }
+
+      // 전체 거리/시간 추출 (첫 번째 Point feature의 properties에 포함)
+      int totalDistance = 0;
+      int totalTime = 0;
+      final path = <NLatLng>[];
+
+      for (final feature in features) {
+        final geometry = feature['geometry'];
+        final properties = feature['properties'];
+
+        // 첫 번째 Point (출발지)에서 totalDistance, totalTime 추출
+        if (geometry['type'] == 'Point' && properties['totalDistance'] != null) {
+          totalDistance = properties['totalDistance'] as int;
+          totalTime = properties['totalTime'] as int;
+        }
+
+        // LineString에서 경로 좌표 추출
+        if (geometry['type'] == 'LineString') {
+          final coordinates = geometry['coordinates'] as List<dynamic>;
+          for (final coord in coordinates) {
+            // [lng, lat] 형식
+            final lng = (coord[0] as num).toDouble();
+            final lat = (coord[1] as num).toDouble();
+            path.add(NLatLng(lat, lng));
+          }
+        }
+      }
+
+      if (path.isEmpty) {
+        if (kDebugMode) {
+          print('❌ Tmap 경로에서 좌표를 추출하지 못함');
+        }
+        return null;
+      }
+
+      if (kDebugMode) {
+        print('✅ Tmap 경로 로드 성공: ${path.length}개 좌표, ${totalDistance}m, ${totalTime}초');
+      }
+
+      return RouteResult(
+        path: path,
+        summary: RouteSummary(
+          distance: totalDistance,
+          duration: totalTime * 1000, // 초 → 밀리초
+        ),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Tmap 경로 파싱 오류: $e');
+      }
+      return null;
+    }
+  }
+
+  /// Tmap 대중교통 경로 응답 파싱
+  static RouteResult? _parseTmapTransitResponse(String responseBody) {
+    try {
+      final data = jsonDecode(responseBody);
+      final metaData = data['metaData'];
+
+      if (metaData == null) {
+        if (kDebugMode) {
+          print('❌ Tmap 대중교통 응답에 metaData가 없음');
+        }
+        return null;
+      }
+
+      final plan = metaData['plan'];
+      if (plan == null) {
+        if (kDebugMode) {
+          print('❌ Tmap 대중교통 응답에 plan이 없음');
+        }
+        return null;
+      }
+
+      final itineraries = plan['itineraries'] as List<dynamic>?;
+      if (itineraries == null || itineraries.isEmpty) {
+        if (kDebugMode) {
+          print('❌ Tmap 대중교통 경로가 없음');
+        }
+        return null;
+      }
+
+      // 첫 번째 경로 사용
+      final itinerary = itineraries[0];
+      final totalTime = itinerary['totalTime'] as int; // 초 단위
+      final totalDistance = itinerary['totalDistance'] as int? ?? 0; // 미터
+
+      // legs에서 경로 좌표 추출
+      final legs = itinerary['legs'] as List<dynamic>?;
+      final path = <NLatLng>[];
+
+      if (legs != null) {
+        for (final leg in legs) {
+          // 각 leg의 시작점 추가
+          final start = leg['start'];
+          if (start != null) {
+            final lat = (start['lat'] as num).toDouble();
+            final lon = (start['lon'] as num).toDouble();
+            path.add(NLatLng(lat, lon));
+          }
+
+          // passShape가 있으면 상세 경로 추출
+          final passShape = leg['passShape'];
+          if (passShape != null) {
+            final lineString = passShape['linestring'] as String?;
+            if (lineString != null) {
+              // "lon1 lat1, lon2 lat2, ..." 형식 파싱
+              final points = lineString.split(',');
+              for (final point in points) {
+                final coords = point.trim().split(' ');
+                if (coords.length >= 2) {
+                  final lon = double.tryParse(coords[0]);
+                  final lat = double.tryParse(coords[1]);
+                  if (lon != null && lat != null) {
+                    path.add(NLatLng(lat, lon));
+                  }
+                }
+              }
+            }
+          }
+
+          // 각 leg의 끝점 추가
+          final end = leg['end'];
+          if (end != null) {
+            final lat = (end['lat'] as num).toDouble();
+            final lon = (end['lon'] as num).toDouble();
+            path.add(NLatLng(lat, lon));
+          }
+        }
+      }
+
+      // 경로가 없으면 출발/도착만이라도 추가
+      if (path.isEmpty) {
+        final startLat = (plan['startLat'] as num?)?.toDouble();
+        final startLon = (plan['startLon'] as num?)?.toDouble();
+        final endLat = (plan['endLat'] as num?)?.toDouble();
+        final endLon = (plan['endLon'] as num?)?.toDouble();
+
+        if (startLat != null && startLon != null) {
+          path.add(NLatLng(startLat, startLon));
+        }
+        if (endLat != null && endLon != null) {
+          path.add(NLatLng(endLat, endLon));
+        }
+      }
+
+      if (path.isEmpty) {
+        if (kDebugMode) {
+          print('❌ Tmap 대중교통 경로에서 좌표를 추출하지 못함');
+        }
+        return null;
+      }
+
+      if (kDebugMode) {
+        print('✅ Tmap 대중교통 경로 로드 성공: ${path.length}개 좌표, ${totalDistance}m, ${totalTime}초');
+      }
+
+      return RouteResult(
+        path: path,
+        summary: RouteSummary(
+          distance: totalDistance,
+          duration: totalTime * 1000, // 초 → 밀리초
+        ),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Tmap 대중교통 파싱 오류: $e');
+      }
+      return null;
+    }
   }
 
   /// 다중 지점 경로 조회

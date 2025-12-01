@@ -108,10 +108,47 @@ class _MapScreenState extends State<MapScreen> {
         _cachedDuration[type] = summary.durationText;
         _cachedDistance[type] = summary.distanceText;
       });
+
+      // 대중교통 fallback 알림 표시
+      if (mapProvider.hasTransitFallback && type == RouteType.transit) {
+        _showTransitFallbackSnackBar();
+      }
     }
 
     _prevIsLoadingRoute = isLoading;
     _prevRouteSummary = summary;
+  }
+
+  /// 대중교통 미지원 알림 SnackBar 표시
+  void _showTransitFallbackSnackBar() {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.info_outline, color: Colors.white),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text('현재 운행하는 대중교통 경로가 없어 도보 경로로 안내합니다'),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.orange.shade700,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: '확인',
+          textColor: Colors.white,
+          onPressed: () {
+            context.read<MapProvider>().clearTransitFallbackNotice();
+          },
+        ),
+      ),
+    );
+
+    // 알림 표시 후 상태 초기화
+    context.read<MapProvider>().clearTransitFallbackNotice();
   }
 
   // ================= 마커 및 폴리라인 =================
