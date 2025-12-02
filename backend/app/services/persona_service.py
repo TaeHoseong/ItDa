@@ -331,7 +331,7 @@ class PersonaService:
         start_time = extracted.get("start_time")
         duration = extracted.get("duration")
         exclude_slots = extracted.get("exclude_slots")
-
+        keyword = extracted.get("keyword")
         if start_time or duration or exclude_slots:
             preferences = CoursePreferences(
                 start_time=start_time,
@@ -345,19 +345,30 @@ class PersonaService:
         print(f"   Date: {date_str}")
         print(f"   Template: {template}")
         print(f"   Preferences: {preferences}")
+        print(f"   Keyword: {keyword}")
         print(f"   User Location: ({user_lat}, {user_lng})")
         print(f"{'='*60}\n")
 
         try:
             # CourseService를 통해 코스 생성 (GPS 위치 전달)
-            course = self.course_service.generate_date_course(
-                user_id=user_id,
-                date=date_str,
-                template=template,
-                preferences=preferences,
-                user_lat=user_lat,
-                user_lng=user_lng
-            )
+            if keyword:
+                course = self.course_service.generate_date_course_by_keyword(
+                    user_id=user_id,
+                    date=date_str,
+                    keyword=keyword,
+                    preferences=preferences,
+                    user_lat=user_lat,
+                    user_lng=user_lng
+                )
+            else:
+                course = self.course_service.generate_date_course(
+                    user_id=user_id,
+                    date=date_str,
+                    template=template,
+                    preferences=preferences,
+                    user_lat=user_lat,
+                    user_lng=user_lng
+                )
 
             # 세션에 생성된 코스 저장
             session["generated_course"] = course

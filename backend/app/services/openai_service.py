@@ -109,6 +109,7 @@ food와 category는 둘 다 추출할 수 있다.
 "오늘 일정 뭐있어?" → view_schedule (timeframe: today)
 "이번 주 일정" → view_schedule (timeframe: this_week)
 "내일 데이트 코스 추천해줘" → generate_course (date: 내일, template: auto)
+"내일 인천문화예술회관 주변 데이트코스 추천해줘" → generate_course (date: 내일, template: auto, keyword: 인천문화예술회관)
 "1번 슬롯 다른 장소로" → regenerate_course_slot (slot_index: 1)
 "1번 슬롯 파스타맛집으로" -> regenerate_course_slot (slot_index:1, category: "food", keyword: 파스타맛집)
 "카페 다른 곳으로" → regenerate_course_slot (slot_index를 카페 슬롯 번호로 추출)
