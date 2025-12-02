@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
@@ -9,8 +12,10 @@ import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/course_provider.dart';
 import '../providers/wishlist_provider.dart';
+import '../providers/turn_by_turn_provider.dart' show TurnByTurnProvider, TurnByTurnMode;
 import '../services/directions_service.dart'; // RouteType, RouteSummary
 import '../services/location_service.dart';
+import '../widgets/navigation_panel.dart';
 
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
@@ -28,6 +33,19 @@ class _MapScreenState extends State<MapScreen> {
   bool _isProgrammaticMove = false;
   List<NPolylineOverlay> _coursePolylines = [];
   int _currentRouteHash = 0;
+
+  // 네비게이션 경로 폴리라인
+  NPolylineOverlay? _navigationPolyline;
+  int _lastNavigationRouteHash = 0;
+
+  // 네비게이션 마커들
+  NMarker? _currentLocationMarker;
+  List<NMarker> _turnPointMarkers = [];
+  NMarker? _destinationMarker;
+
+  // 실시간 위치 추적
+  StreamSubscription<Position>? _locationSubscription;
+  NLatLng? _currentPosition;
 
   _BottomTab _currentTab = _BottomTab.place;
 
@@ -83,6 +101,26 @@ class _MapScreenState extends State<MapScreen> {
 
       // 초기 찜 마커 동기화
       mapProvider.syncWishlistMarkers(wishlistProvider.wishlists);
+
+      // 실시간 위치 스트림 시작
+      _startLocationStream();
+    });
+  }
+
+  /// 실시간 위치 스트림 시작
+  void _startLocationStream() {
+    _locationSubscription?.cancel();
+    _locationSubscription = LocationService.startPositionStream(
+      distanceFilter: 5, // 5m 이동 시 업데이트
+    ).listen((position) async {
+      _currentPosition = NLatLng(position.latitude, position.longitude);
+
+      // 지도 위치 오버레이 업데이트
+      if (_mapController != null) {
+        final overlay = await _mapController!.getLocationOverlay();
+        overlay.setPosition(_currentPosition!);
+        overlay.setIsVisible(true);
+      }
     });
   }
 
@@ -95,6 +133,7 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   void dispose() {
+    _locationSubscription?.cancel();
     try {
       context.read<MapProvider>().removeListener(_onMapProviderChanged);
       context.read<WishlistProvider>().removeListener(_onWishlistChanged);
@@ -437,30 +476,60 @@ class _MapScreenState extends State<MapScreen> {
                           label: Text(isWishlisted ? '찜 취소' : '찜하기'),
                         ),
                       ),
-                      // 상세보기 버튼 (link가 있을 때만)
-                      if (link != null && link.isNotEmpty) ...[
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              // URL 열기
-                              launchUrlString(link!);
-                            },
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: const Color(0xFFFF6F61),
-                              side: const BorderSide(color: Color(0xFFFF6F61)),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                      const SizedBox(width: 12),
+                      // 도보 안내 버튼
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            final navProvider = context.read<TurnByTurnProvider>();
+                            final success = await navProvider.startNavigation(
+                              NLatLng(latitude, longitude),
+                              destinationName: title,
+                            );
+                            if (!success && mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('네비게이션을 시작할 수 없습니다')),
+                              );
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF6B9D),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Text('상세보기'),
                           ),
+                          icon: const Icon(Icons.directions_walk, size: 20),
+                          label: const Text('도보 안내'),
                         ),
-                      ],
+                      ),
                     ],
                   ),
+                  // 상세보기 버튼 (link가 있을 때만)
+                  if (link != null && link.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          // URL 열기
+                          launchUrlString(link!);
+                        },
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFFF6F61),
+                          side: const BorderSide(color: Color(0xFFFF6F61)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text('상세보기'),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             );
@@ -468,6 +537,235 @@ class _MapScreenState extends State<MapScreen> {
         );
       },
     );
+  }
+
+  /// 네비게이션 경로 폴리라인 그리기
+  Future<void> _drawNavigationRoute(
+    NaverMapController controller,
+    List<NLatLng> path,
+  ) async {
+    // 기존 네비게이션 폴리라인 제거
+    if (_navigationPolyline != null) {
+      try {
+        await controller.deleteOverlay(_navigationPolyline!.info);
+      } catch (_) {}
+      _navigationPolyline = null;
+    }
+
+    if (path.isEmpty) return;
+
+    // 새 폴리라인 생성 (파란색 계열로 네비게이션 경로 표시)
+    _navigationPolyline = NPolylineOverlay(
+      id: 'navigation_route',
+      coords: path,
+      color: const Color(0xFF4A90D9), // 파란색
+      width: 6,
+    );
+
+    await controller.addOverlay(_navigationPolyline!);
+    debugPrint('🗺️ 네비게이션 경로 표시: ${path.length}개 좌표');
+  }
+
+  /// 네비게이션 경로 폴리라인 제거
+  Future<void> _clearNavigationRoute(NaverMapController controller) async {
+    if (_navigationPolyline != null) {
+      try {
+        await controller.deleteOverlay(_navigationPolyline!.info);
+      } catch (_) {}
+      _navigationPolyline = null;
+      _lastNavigationRouteHash = 0;
+    }
+  }
+
+  /// 현재 위치 마커 업데이트
+  Future<void> _updateCurrentLocationMarker(
+    NaverMapController controller,
+    NLatLng position,
+    double? heading,
+  ) async {
+    // 기존 마커 제거
+    if (_currentLocationMarker != null) {
+      try {
+        await controller.deleteOverlay(_currentLocationMarker!.info);
+      } catch (_) {}
+    }
+
+    // 새 마커 생성 (파란색 위치 마커)
+    final icon = await NOverlayImage.fromWidget(
+      widget: Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          color: const Color(0xFF4A90D9),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 3),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: heading != null
+            ? Transform.rotate(
+                angle: heading * 3.14159 / 180,
+                child: const Icon(
+                  Icons.navigation,
+                  color: Colors.white,
+                  size: 14,
+                ),
+              )
+            : null,
+      ),
+      size: const Size(24, 24),
+      context: context,
+    );
+
+    _currentLocationMarker = NMarker(
+      id: 'current_location_nav',
+      position: position,
+      icon: icon,
+    );
+
+    await controller.addOverlay(_currentLocationMarker!);
+  }
+
+  /// 전환점 마커들 표시
+  Future<void> _drawTurnPointMarkers(
+    NaverMapController controller,
+    List<NLatLng> turnPoints,
+  ) async {
+    // 기존 전환점 마커들 제거
+    for (final marker in _turnPointMarkers) {
+      try {
+        await controller.deleteOverlay(marker.info);
+      } catch (_) {}
+    }
+    _turnPointMarkers.clear();
+
+    if (turnPoints.isEmpty) return;
+
+    // 각 전환점에 마커 추가 (주황색 점)
+    for (int i = 0; i < turnPoints.length; i++) {
+      final icon = await NOverlayImage.fromWidget(
+        widget: Container(
+          width: 14,
+          height: 14,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF9800),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+        ),
+        size: const Size(14, 14),
+        context: context,
+      );
+
+      final marker = NMarker(
+        id: 'turn_point_$i',
+        position: turnPoints[i],
+        icon: icon,
+      );
+
+      await controller.addOverlay(marker);
+      _turnPointMarkers.add(marker);
+    }
+
+    debugPrint('📍 전환점 마커 ${turnPoints.length}개 표시');
+  }
+
+  /// 목적지 마커 표시
+  Future<void> _drawDestinationMarker(
+    NaverMapController controller,
+    NLatLng destination,
+    String? name,
+  ) async {
+    // 기존 목적지 마커 제거
+    if (_destinationMarker != null) {
+      try {
+        await controller.deleteOverlay(_destinationMarker!.info);
+      } catch (_) {}
+    }
+
+    final icon = await NOverlayImage.fromWidget(
+      widget: Container(
+        width: 32,
+        height: 40,
+        child: Column(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE91E63),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.flag,
+                color: Colors.white,
+                size: 18,
+              ),
+            ),
+            Container(
+              width: 4,
+              height: 8,
+              color: const Color(0xFFE91E63),
+            ),
+          ],
+        ),
+      ),
+      size: const Size(32, 40),
+      context: context,
+    );
+
+    _destinationMarker = NMarker(
+      id: 'navigation_destination',
+      position: destination,
+      icon: icon,
+      caption: name != null ? NOverlayCaption(text: name) : null,
+    );
+
+    await controller.addOverlay(_destinationMarker!);
+  }
+
+  /// 네비게이션 마커들 제거
+  Future<void> _clearNavigationMarkers(NaverMapController controller) async {
+    if (_currentLocationMarker != null) {
+      try {
+        await controller.deleteOverlay(_currentLocationMarker!.info);
+      } catch (_) {}
+      _currentLocationMarker = null;
+    }
+
+    for (final marker in _turnPointMarkers) {
+      try {
+        await controller.deleteOverlay(marker.info);
+      } catch (_) {}
+    }
+    _turnPointMarkers.clear();
+
+    if (_destinationMarker != null) {
+      try {
+        await controller.deleteOverlay(_destinationMarker!.info);
+      } catch (_) {}
+      _destinationMarker = null;
+    }
   }
 
   Future<void> _addCoursePolylines(
@@ -713,6 +1011,28 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  // ================= 도착 다이얼로그 =================
+
+  bool _arrivalDialogShown = false;
+
+  void _showArrivalDialog(TurnByTurnProvider provider) {
+    if (_arrivalDialogShown) return;
+    _arrivalDialogShown = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => ArrivalDialog(
+        destinationName: provider.destinationName,
+        onDismiss: () {
+          Navigator.pop(ctx);
+          provider.dismissArrival();
+          _arrivalDialogShown = false;
+        },
+      ),
+    );
+  }
+
   // ================= build =================
 
   @override
@@ -722,8 +1042,17 @@ class _MapScreenState extends State<MapScreen> {
     final navigationProvider = context.watch<NavigationProvider>();
     final courseProvider = context.watch<CourseProvider>();
     final wishlistProvider = context.watch<WishlistProvider>();
+    final turnByTurnProvider = context.watch<TurnByTurnProvider>();
 
     final allCourses = courseProvider.allCourses;
+    final isNavigating = turnByTurnProvider.mode != TurnByTurnMode.idle;
+
+    // 도착 시 다이얼로그 표시
+    if (turnByTurnProvider.mode == TurnByTurnMode.arrived) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showArrivalDialog(turnByTurnProvider);
+      });
+    }
 
     String durationLabelFor(RouteType type) {
       final cached = _cachedDuration[type];
@@ -759,6 +1088,67 @@ class _MapScreenState extends State<MapScreen> {
         });
       }
 
+      // 네비게이션 경로 동기화
+      final navRoute = turnByTurnProvider.route?.path;
+      final navRouteHash = navRoute == null || navRoute.isEmpty
+          ? 0
+          : navRoute.length.hashCode ^
+              navRoute.first.latitude.hashCode ^
+              navRoute.last.longitude.hashCode;
+
+      if (isNavigating && navRouteHash != _lastNavigationRouteHash && navRoute != null) {
+        _lastNavigationRouteHash = navRouteHash;
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (_mapController != null) {
+            await _drawNavigationRoute(_mapController!, navRoute);
+
+            // 전환점 마커 표시
+            await _drawTurnPointMarkers(_mapController!, turnByTurnProvider.turnPoints);
+
+            // 목적지 마커 표시
+            if (turnByTurnProvider.destination != null) {
+              await _drawDestinationMarker(
+                _mapController!,
+                turnByTurnProvider.destination!,
+                turnByTurnProvider.destinationName,
+              );
+            }
+
+            // 전체 경로가 보이도록 카메라 이동
+            if (navRoute.length >= 2) {
+              _isProgrammaticMove = true;
+              final bounds = NLatLngBounds.from(navRoute);
+              await _mapController!.updateCamera(
+                NCameraUpdate.fitBounds(
+                  bounds,
+                  padding: const EdgeInsets.all(80),
+                ),
+              );
+            }
+          }
+        });
+      } else if (!isNavigating && _navigationPolyline != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (_mapController != null) {
+            await _clearNavigationRoute(_mapController!);
+            await _clearNavigationMarkers(_mapController!);
+          }
+        });
+      }
+
+      // 현재 위치 마커 실시간 업데이트 (네비게이션 중일 때)
+      if (isNavigating && turnByTurnProvider.currentLatLng != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          if (_mapController != null) {
+            await _updateCurrentLocationMarker(
+              _mapController!,
+              turnByTurnProvider.currentLatLng!,
+              turnByTurnProvider.currentHeading,
+            );
+          }
+        });
+      }
+
       final newMarkerIds = mapProvider.markers.map((m) => m.id).toList();
       final route = mapProvider.courseRoute;
       final newRouteHash = route == null || route.isEmpty
@@ -783,6 +1173,7 @@ class _MapScreenState extends State<MapScreen> {
 
           await _mapController!.clearOverlays();
           _coursePolylines.clear();
+          _navigationPolyline = null; // clearOverlays로 제거됨
 
           if (mapProvider.markers.isNotEmpty) {
             await _addMarkersToMap(_mapController!, mapProvider.markers);
@@ -794,6 +1185,11 @@ class _MapScreenState extends State<MapScreen> {
               mapProvider.courseSegments,
               mapProvider.courseRoute,
             );
+          }
+
+          // 네비게이션 중이면 경로도 다시 그리기
+          if (isNavigating && navRoute != null && navRoute.isNotEmpty) {
+            await _drawNavigationRoute(_mapController!, navRoute);
           }
 
           _currentMarkerIds = newMarkerIds;
@@ -853,8 +1249,8 @@ class _MapScreenState extends State<MapScreen> {
             },
           ),
 
-          // ===== 상단 UI (지도 모드 검색바) =====
-          Positioned.fill(
+          // ===== 상단 UI (지도 모드 검색바) - 네비게이션 모드가 아닐 때만 =====
+          if (!isNavigating) Positioned.fill(
             child: Column(
               children: [
                 SizedBox(height: padding.top + 16),
@@ -1070,8 +1466,8 @@ class _MapScreenState extends State<MapScreen> {
             ),
           ),
 
-          // ===== 하단 드래그 시트 =====
-          DraggableScrollableSheet(
+          // ===== 하단 드래그 시트 - 네비게이션 모드가 아닐 때만 =====
+          if (!isNavigating) DraggableScrollableSheet(
             initialChildSize: 0.2,
             minChildSize: 0.2,
             maxChildSize: 1.0,
@@ -1400,6 +1796,29 @@ class _MapScreenState extends State<MapScreen> {
               );
             },
           ),
+
+          // ===== 네비게이션 모드 UI =====
+          if (isNavigating) ...[
+            // 상단 바
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: NavigationTopBar(
+                onStop: () => turnByTurnProvider.stopNavigation(),
+              ),
+            ),
+
+            // 하단 패널
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: NavigationPanel(
+                onStop: () => turnByTurnProvider.stopNavigation(),
+              ),
+            ),
+          ],
 
           // ===== 검색 모드 오버레이 =====
           if (_isSearchMode) _buildSearchOverlay(padding, mapProvider),

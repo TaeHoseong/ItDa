@@ -20,6 +20,7 @@ import 'providers/navigation_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/wishlist_provider.dart';
+import 'providers/turn_by_turn_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -108,6 +109,11 @@ void main() async {
         // 5) 찜목록 관리
         ChangeNotifierProvider(
           create: (_) => WishlistProvider(),
+        ),
+
+        // 6) 턴바이턴 네비게이션
+        ChangeNotifierProvider(
+          create: (_) => TurnByTurnProvider(),
         ),
       ],
       child: const ItdaApp(),

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/navigation_step.dart';
 import '../secrets.dart';
 
 /// 경로 타입
@@ -479,5 +480,213 @@ class DirectionsService {
         duration: totalDuration,
       ),
     );
+  }
+
+  // ============================================
+  // 턴바이턴 네비게이션용 상세 경로 조회
+  // ============================================
+
+  /// 도보 경로 + 턴바이턴 안내 조회 (Tmap Pedestrian API)
+  static Future<DetailedRouteResult?> getDetailedWalkingRoute(
+    NLatLng start,
+    NLatLng end,
+  ) async {
+    final url =
+        Uri.parse('$_tmapBaseUrl/tmap/routes/pedestrian?version=1&format=json');
+
+    try {
+      if (kDebugMode) {
+        print('🚶 Tmap 상세 도보 경로 API 요청:');
+        print('   출발: ${start.latitude}, ${start.longitude}');
+        print('   도착: ${end.latitude}, ${end.longitude}');
+      }
+
+      final response = await http.post(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'appKey': TMAP_APP_KEY,
+        },
+        body: jsonEncode({
+          'startX': start.longitude.toString(),
+          'startY': start.latitude.toString(),
+          'endX': end.longitude.toString(),
+          'endY': end.latitude.toString(),
+          'startName': '출발지',
+          'endName': '도착지',
+          'reqCoordType': 'WGS84GEO',
+          'resCoordType': 'WGS84GEO',
+          'searchOption': '0', // 추천 경로
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        if (kDebugMode) {
+          print('❌ Tmap 상세 도보 API 오류: ${response.statusCode}');
+          print('Response: ${response.body}');
+        }
+        return null;
+      }
+
+      return _parseTmapDetailedResponse(response.body, end);
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Tmap 상세 도보 API 예외: $e');
+      }
+      return null;
+    }
+  }
+
+  /// Tmap 도보 응답에서 상세 턴바이턴 정보 추출
+  static DetailedRouteResult? _parseTmapDetailedResponse(
+    String responseBody,
+    NLatLng destination,
+  ) {
+    try {
+      final data = jsonDecode(responseBody);
+      final features = data['features'] as List<dynamic>?;
+
+      if (features == null || features.isEmpty) {
+        if (kDebugMode) {
+          print('❌ Tmap 상세 경로 응답에 features가 없음');
+        }
+        return null;
+      }
+
+      // 전체 거리/시간 추출
+      int totalDistance = 0;
+      int totalTime = 0;
+      final path = <NLatLng>[];
+      final steps = <NavigationStep>[];
+
+      // 현재 처리 중인 step 정보
+      int stepIndex = 0;
+      List<NLatLng> currentStepPolyline = [];
+
+      for (int i = 0; i < features.length; i++) {
+        final feature = features[i];
+        final geometry = feature['geometry'];
+        final properties = feature['properties'];
+        final geometryType = geometry['type'] as String;
+
+        // Point feature 처리
+        if (geometryType == 'Point') {
+          final coords = geometry['coordinates'] as List<dynamic>;
+          final lng = (coords[0] as num).toDouble();
+          final lat = (coords[1] as num).toDouble();
+          final pointLocation = NLatLng(lat, lng);
+
+          // 첫 번째 Point (출발지)에서 totalDistance, totalTime 추출
+          if (properties['totalDistance'] != null) {
+            totalDistance = properties['totalDistance'] as int;
+            totalTime = properties['totalTime'] as int;
+          }
+
+          // turnType이 있는 Point는 안내 지점
+          final turnType = properties['turnType'] as int?;
+          final description = properties['description'] as String? ?? '';
+          final pointType = properties['pointType'] as String?;
+
+          if (turnType != null || pointType == 'SP' || pointType == 'EP') {
+            // 이전 step의 polyline 마무리
+            if (steps.isNotEmpty && currentStepPolyline.isNotEmpty) {
+              // 마지막 step의 polyline 업데이트
+              final lastStep = steps.last;
+              steps[steps.length - 1] = NavigationStep(
+                index: lastStep.index,
+                description: lastStep.description,
+                turnType: lastStep.turnType,
+                turnTypeIcon: lastStep.turnTypeIcon,
+                distanceMeters: lastStep.distanceMeters,
+                durationSeconds: lastStep.durationSeconds,
+                location: lastStep.location,
+                polyline: List.from(currentStepPolyline),
+              );
+            }
+
+            // 새 step 생성
+            final effectiveTurnType = turnType ?? (pointType == 'SP' ? 200 : 201);
+            final distance = properties['distance'] as int? ?? 0;
+            final time = properties['time'] as int? ?? 0;
+
+            steps.add(NavigationStep(
+              index: stepIndex++,
+              description: description.isEmpty
+                  ? NavigationStep.getTurnTypeText(effectiveTurnType)
+                  : description,
+              turnType: effectiveTurnType,
+              turnTypeIcon: NavigationStep.getTurnTypeIcon(effectiveTurnType),
+              distanceMeters: distance,
+              durationSeconds: time,
+              location: pointLocation,
+              polyline: null, // 나중에 업데이트
+            ));
+
+            // 새 polyline 시작
+            currentStepPolyline = [pointLocation];
+          }
+        }
+        // LineString feature 처리
+        else if (geometryType == 'LineString') {
+          final coordinates = geometry['coordinates'] as List<dynamic>;
+
+          for (final coord in coordinates) {
+            final lng = (coord[0] as num).toDouble();
+            final lat = (coord[1] as num).toDouble();
+            final point = NLatLng(lat, lng);
+            path.add(point);
+            currentStepPolyline.add(point);
+          }
+        }
+      }
+
+      // 마지막 step의 polyline 마무리
+      if (steps.isNotEmpty && currentStepPolyline.isNotEmpty) {
+        final lastStep = steps.last;
+        steps[steps.length - 1] = NavigationStep(
+          index: lastStep.index,
+          description: lastStep.description,
+          turnType: lastStep.turnType,
+          turnTypeIcon: lastStep.turnTypeIcon,
+          distanceMeters: lastStep.distanceMeters,
+          durationSeconds: lastStep.durationSeconds,
+          location: lastStep.location,
+          polyline: List.from(currentStepPolyline),
+        );
+      }
+
+      if (path.isEmpty) {
+        if (kDebugMode) {
+          print('❌ Tmap 상세 경로에서 좌표를 추출하지 못함');
+        }
+        return null;
+      }
+
+      if (kDebugMode) {
+        print('✅ Tmap 상세 경로 로드 성공:');
+        print('   - ${path.length}개 좌표');
+        print('   - ${steps.length}개 안내 단계');
+        print('   - ${totalDistance}m, ${totalTime}초');
+        for (final step in steps) {
+          print('   [${step.index}] ${step.description} (${step.turnTypeIcon})');
+        }
+      }
+
+      return DetailedRouteResult(
+        path: path,
+        summary: RouteSummary(
+          distance: totalDistance,
+          duration: totalTime * 1000, // 초 → 밀리초
+        ),
+        steps: steps,
+        destination: destination,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Tmap 상세 경로 파싱 오류: $e');
+      }
+      return null;
+    }
   }
 }
