@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
 import '../models/date_course.dart';
+import '../models/wishlist.dart';
 import '../services/directions_service.dart';
 import '../services/search_api_service.dart';
 
@@ -10,12 +12,14 @@ class MapMarker {
   final NLatLng position;
   final String? caption;
   final dynamic data; // CourseSlot or Search Result Map
+  final Color? iconColor; // 마커 아이콘 색상
 
   MapMarker({
     required this.id,
     required this.position,
     this.caption,
     this.data,
+    this.iconColor,
   });
 }
 
@@ -160,6 +164,9 @@ class MapProvider extends ChangeNotifier {
 
     // 코스 슬롯 마커 추가 (기존 마커와 구분)
     _markers.removeWhere((m) => m.id.startsWith('course_'));
+
+    // 코스 길안내 중에는 찜 마커 숨김
+    _markers.removeWhere((m) => m.id.startsWith('wishlist_'));
 
     for (int i = 0; i < course.slots.length; i++) {
       final slot = course.slots[i];
@@ -394,12 +401,56 @@ class MapProvider extends ChangeNotifier {
         data: item,
       ),
     );
-    
+
     // 카메라 이동을 위해 타겟 업데이트 (UI에서 참조 가능)
     _cameraTarget = NLatLng(lat, lng);
     _zoom = 16.0; // 검색 결과는 상세하게 보여줌
     _hasPendingMove = true; // 지도 이동 트리거
-    
+
     notifyListeners();
+  }
+
+  // =====================
+  // 찜 목록 마커
+  // =====================
+
+  bool _showWishlistMarkers = true;
+
+  bool get showWishlistMarkers => _showWishlistMarkers;
+
+  /// 찜 목록 마커 표시 토글
+  void toggleWishlistMarkers() {
+    _showWishlistMarkers = !_showWishlistMarkers;
+    notifyListeners();
+  }
+
+  /// 찜 목록으로 마커 동기화
+  void syncWishlistMarkers(List<Wishlist> wishlists) {
+    // 기존 찜 마커 제거 (id가 'wishlist_'로 시작하는 것들)
+    _markers.removeWhere((m) => m.id.startsWith('wishlist_'));
+
+    // 코스 길안내 중이거나 찜 마커 숨김 상태면 추가하지 않음
+    if (!_showWishlistMarkers || hasCourseRoute) {
+      notifyListeners();
+      return;
+    }
+
+    for (final wishlist in wishlists) {
+      _markers.add(
+        MapMarker(
+          id: 'wishlist_${wishlist.id}',
+          position: NLatLng(wishlist.latitude, wishlist.longitude),
+          caption: wishlist.placeName,
+          data: wishlist,
+          iconColor: const Color(0xFFFF6B35), // 주황색
+        ),
+      );
+    }
+
+    notifyListeners();
+
+    if (kDebugMode) {
+      print('MapProvider: 찜 마커 동기화 완료 (${wishlists.length}개)');
+    }
   }
 }
