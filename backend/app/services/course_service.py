@@ -122,6 +122,7 @@ class CourseService:
         for config in slot_configs:
             slot = self._recommend_for_slot(
                 user_id=user_id,
+                date=date,
                 slot_config=config,
                 previous_location=previous_location,
                 exclude_places=used_places,  # 중복 제외
@@ -308,6 +309,7 @@ class CourseService:
     def _recommend_for_slot(
         self,
         user_id: str,
+        date: str,
         slot_config: Dict,
         previous_location: Optional[Tuple[float, float]] = None,
         exclude_places: Optional[List[str]] = None,
@@ -347,6 +349,7 @@ class CourseService:
             for k in [10, 20, 30, 50]:  # 점진적으로 증가
                 places = self.suggest_service.get_recommendations(
                     user_id=user_id,
+                    date=date,
                     category=category,
                     specific_food=keyword,
                     extra_feature=extra_feature,
