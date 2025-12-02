@@ -19,6 +19,7 @@ import 'providers/course_provider.dart';
 import 'providers/navigation_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/chat_provider.dart';
+import 'providers/wishlist_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -102,6 +103,11 @@ void main() async {
 
             return chatProvider;
           },
+        ),
+
+        // 5) 찜목록 관리
+        ChangeNotifierProvider(
+          create: (_) => WishlistProvider(),
         ),
       ],
       child: const ItdaApp(),
@@ -188,12 +194,15 @@ class _MainScreenState extends State<MainScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final courseProvider = Provider.of<CourseProvider>(context, listen: false);
       final userProvider   = Provider.of<UserProvider>(context, listen: false);
-      
+      final wishlistProvider = Provider.of<WishlistProvider>(context, listen: false);
+
       final coupleId = userProvider.user?.coupleId;
 
       if (coupleId != null) {
         try {
           await courseProvider.initForCouple(coupleId);
+          // 찜목록 로드
+          await wishlistProvider.loadWishlists();
         } catch (e) {
           debugPrint('initForCouple 실패: $e');
         }
