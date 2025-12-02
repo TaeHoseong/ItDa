@@ -36,6 +36,13 @@ uvicorn app.main:app
 ```
 Finally, you can run flutter app
 ```
+# 에뮬레이터 위치 설정 (센트럴파크)
+adb emu geo fix 126.6435981392 37.3903993102
+
+
+# 에뮬레이터 위치 설정 (연세대학교 국제캠퍼스 진리관C)
+adb emu geo fix 126.671083 37.382556
+
 cd itda_app
 flutter run
 ```

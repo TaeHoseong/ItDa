@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/persona_message.dart';
 import '../models/date_course.dart';
 import '../services/persona_api_service.dart';
+import '../services/location_service.dart';
 import 'course_provider.dart';
 
 class PersonaChatProvider extends ChangeNotifier {
@@ -88,8 +89,16 @@ class PersonaChatProvider extends ChangeNotifier {
       const storage = FlutterSecureStorage();
       final userId = await storage.read(key: 'user_id');
 
-      debugPrint('전송: $text (userId: $userId)');
-      final response = await _apiService.sendMessage(text, userId: userId);
+      // GPS 위치 가져오기 (공통 서비스 사용)
+      final position = await LocationService.getCurrentPosition();
+
+      debugPrint('전송: $text (userId: $userId, lat: ${position?.latitude}, lng: ${position?.longitude})');
+      final response = await _apiService.sendMessage(
+        text,
+        userId: userId,
+        userLat: position?.latitude,
+        userLng: position?.longitude,
+      );
 
       debugPrint(
           '📥 백엔드 응답: action=${response['action']}, message=${response['message']}');

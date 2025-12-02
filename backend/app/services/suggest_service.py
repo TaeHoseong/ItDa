@@ -142,7 +142,9 @@ class SuggestService:
         alpha: float = 0.8,
         beta: float = 0.7,
         gamma: float = 0.2,
-        delta: float = 0.4
+        delta: float = 0.4,
+        user_lat: Optional[float] = None,
+        user_lng: Optional[float] = None
     ) -> List[Dict]:
         """
         장소 추천 메인 함수
@@ -157,6 +159,8 @@ class SuggestService:
             beta: distance 가중치
             gamma: rating 가중치
             delta: price 가중치
+            user_lat: 사용자 위도 (GPS 기반 추천용)
+            user_lng: 사용자 경도 (GPS 기반 추천용)
 
         Returns:
             [{"name": str, "score": float}, ...]
@@ -208,7 +212,9 @@ class SuggestService:
                 alpha=alpha,
                 beta=beta,
                 gamma=gamma,
-                delta=delta
+                delta=delta,
+                user_lat=user_lat,
+                user_lng=user_lng
             )
         except Exception as e:
             print(f"[ERROR] algorithm.recommend_topk failed: {e}")

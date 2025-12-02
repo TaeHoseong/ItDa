@@ -1,4 +1,7 @@
 class ApiConfig {
+  // 실제 기기 테스트용 (ngrok 고정 도메인)
+  //static const String baseUrl = 'https://bibless-ingrid-unmurmured.ngrok-free.dev/api/v1';
+
   // Android 에뮬레이터에서 localhost 접근
   static const String baseUrl = 'http://10.0.2.2:8000/api/v1';
 

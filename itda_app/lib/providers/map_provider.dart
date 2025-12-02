@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 
 import '../models/date_course.dart';
+import '../models/wishlist.dart';
 import '../services/directions_service.dart';
 import '../services/search_api_service.dart';
 
@@ -10,12 +12,14 @@ class MapMarker {
   final NLatLng position;
   final String? caption;
   final dynamic data; // CourseSlot or Search Result Map
+  final Color? iconColor; // 마커 아이콘 색상
 
   MapMarker({
     required this.id,
     required this.position,
     this.caption,
     this.data,
+    this.iconColor,
   });
 }
 
@@ -37,6 +41,7 @@ class MapProvider extends ChangeNotifier {
   RouteType _routeType = RouteType.walking;
   bool _isLoadingRoute = false;
   RouteSummary? _routeSummary;
+  bool _hasTransitFallback = false; // 대중교통 미지원으로 도보 fallback 발생 여부
 
   // 🔹 가장 최근 경로 요청 id (비동기 응답 레이스 방지용)
   int _routeRequestId = 0;
@@ -55,6 +60,7 @@ class MapProvider extends ChangeNotifier {
   RouteType get routeType => _routeType;
   bool get isLoadingRoute => _isLoadingRoute;
   RouteSummary? get routeSummary => _routeSummary;
+  bool get hasTransitFallback => _hasTransitFallback;
 
   /// 최초 1회 마커/상태 세팅
   void ensureInitialized() {
@@ -159,6 +165,9 @@ class MapProvider extends ChangeNotifier {
     // 코스 슬롯 마커 추가 (기존 마커와 구분)
     _markers.removeWhere((m) => m.id.startsWith('course_'));
 
+    // 코스 길안내 중에는 찜 마커 숨김
+    _markers.removeWhere((m) => m.id.startsWith('wishlist_'));
+
     for (int i = 0; i < course.slots.length; i++) {
       final slot = course.slots[i];
       _markers.add(
@@ -214,6 +223,7 @@ class MapProvider extends ChangeNotifier {
     final RouteType requestType = _routeType;
 
     _isLoadingRoute = true;
+    _hasTransitFallback = false; // 초기화
     notifyListeners();
 
     try {
@@ -241,10 +251,11 @@ class MapProvider extends ChangeNotifier {
         // 구간별 경로 저장
         _courseSegments = segments.map((s) => s.path).toList();
 
-        // 전체 경로 합치기 + 총 거리/시간 합산
+        // 전체 경로 합치기 + 총 거리/시간 합산 + fallback 감지
         final combinedPath = <NLatLng>[];
         int totalDistance = 0;
         int totalDuration = 0;
+        bool hasFallback = false;
 
         for (final segment in segments) {
           if (combinedPath.isNotEmpty && segment.path.isNotEmpty) {
@@ -254,6 +265,11 @@ class MapProvider extends ChangeNotifier {
           }
           totalDistance += segment.summary.distance;
           totalDuration += segment.summary.duration;
+
+          // 대중교통 fallback 감지
+          if (segment.isTransitFallback) {
+            hasFallback = true;
+          }
         }
 
         _courseRoute = combinedPath;
@@ -261,10 +277,14 @@ class MapProvider extends ChangeNotifier {
           distance: totalDistance,
           duration: totalDuration,
         );
+        _hasTransitFallback = hasFallback;
 
         if (kDebugMode) {
           print(
               '🗺️ 경로 로드 완료(type=$requestType): ${_routeSummary!.distanceText}, ${_routeSummary!.durationText}');
+          if (hasFallback) {
+            print('⚠️ 일부 구간 대중교통 미지원, 도보로 대체됨');
+          }
         }
       } else {
         // API 실패 시 직선 경로 fallback
@@ -308,6 +328,7 @@ class MapProvider extends ChangeNotifier {
     _courseSegments = null;
     _courseSlots = null;
     _routeSummary = null;
+    _hasTransitFallback = false;
     _routeRequestId++; // 🔹 기존 진행 중인 요청들은 모두 "구버전"으로 취급
     _isLoadingRoute = false;
     _markers.removeWhere((m) => m.id.startsWith('course_'));
@@ -316,6 +337,12 @@ class MapProvider extends ChangeNotifier {
     if (kDebugMode) {
       print('MapProvider: 코스 경로 초기화');
     }
+  }
+
+  /// 대중교통 fallback 알림 확인 완료 처리
+  void clearTransitFallbackNotice() {
+    _hasTransitFallback = false;
+    notifyListeners();
   }
 
   // =====================
@@ -374,12 +401,56 @@ class MapProvider extends ChangeNotifier {
         data: item,
       ),
     );
-    
+
     // 카메라 이동을 위해 타겟 업데이트 (UI에서 참조 가능)
     _cameraTarget = NLatLng(lat, lng);
     _zoom = 16.0; // 검색 결과는 상세하게 보여줌
     _hasPendingMove = true; // 지도 이동 트리거
-    
+
     notifyListeners();
+  }
+
+  // =====================
+  // 찜 목록 마커
+  // =====================
+
+  bool _showWishlistMarkers = true;
+
+  bool get showWishlistMarkers => _showWishlistMarkers;
+
+  /// 찜 목록 마커 표시 토글
+  void toggleWishlistMarkers() {
+    _showWishlistMarkers = !_showWishlistMarkers;
+    notifyListeners();
+  }
+
+  /// 찜 목록으로 마커 동기화
+  void syncWishlistMarkers(List<Wishlist> wishlists) {
+    // 기존 찜 마커 제거 (id가 'wishlist_'로 시작하는 것들)
+    _markers.removeWhere((m) => m.id.startsWith('wishlist_'));
+
+    // 코스 길안내 중이거나 찜 마커 숨김 상태면 추가하지 않음
+    if (!_showWishlistMarkers || hasCourseRoute) {
+      notifyListeners();
+      return;
+    }
+
+    for (final wishlist in wishlists) {
+      _markers.add(
+        MapMarker(
+          id: 'wishlist_${wishlist.id}',
+          position: NLatLng(wishlist.latitude, wishlist.longitude),
+          caption: wishlist.placeName,
+          data: wishlist,
+          iconColor: const Color(0xFFFF6B35), // 주황색
+        ),
+      );
+    }
+
+    notifyListeners();
+
+    if (kDebugMode) {
+      print('MapProvider: 찜 마커 동기화 완료 (${wishlists.length}개)');
+    }
   }
 }

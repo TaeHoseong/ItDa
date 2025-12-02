@@ -20,7 +20,8 @@ personas = np.array([
     # 3. 트렌디한 맛집 탐방러
     [1,0,0,0,0,0,  0.3,0.5,0.9,0.4,0.3,0.8,  0.9,0.2,0.9,0.5,  0.9,0.7,0.7,0.3],
 ])
-persona_position = [37.382556, 126.671083]
+# 기본 위치 (사용자 위치가 없을 때 사용)
+DEFAULT_POSITION = [37.382556, 126.671083]  # 송도 연세대학교 국제캠퍼스 진리관C
 
 def extract_features(place: json, persona):
     try:
@@ -45,7 +46,7 @@ def extract_features(place: json, persona):
         print(f"key error | {e} in place: {place.get('name', 'Unknown')}")
         return np.zeros(20), 0, 0  # 수정: 3개 값 반환 (4개 아님)
 
-def recommend_topk(persona, last_recommend=None, candidate_names=None, category=None, extra_feature=None, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4):
+def recommend_topk(persona, last_recommend=None, candidate_names=None, category=None, extra_feature=None, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4, user_lat=None, user_lng=None):
     """
     장소 추천 알고리즘
 
@@ -57,7 +58,16 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, category=
         extra_feature: 추가 조건 (atmosphere_romantic, rating_high 등)
         k: 추천 개수
         alpha~delta: 스코어 가중치
+        user_lat: 사용자 위도 (None이면 DEFAULT_POSITION 사용)
+        user_lng: 사용자 경도 (None이면 DEFAULT_POSITION 사용)
     """
+    # 사용자 위치 설정 (GPS 좌표가 없으면 기본 위치 사용)
+    if user_lat is not None and user_lng is not None:
+        user_position = [user_lat, user_lng]
+        print(f"📍 사용자 GPS 위치 사용: {user_lat}, {user_lng}")
+    else:
+        user_position = DEFAULT_POSITION
+        print(f"📍 기본 위치 사용 (송도): {DEFAULT_POSITION}")
     # extra_feature 적용 (weight 타입)
     filter_config = None
     if extra_feature:
@@ -123,7 +133,7 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, category=
                 continue
 
         features, rating, price  = extract_features(scores, persona)
-        distance = haversine_distance(persona_position, [latitude, longitude])
+        distance = haversine_distance(user_position, [latitude, longitude])
         similarity_cos = cos_similarity(features, persona)
         similarity_euclid =1 / np.linalg.norm(features - persona)
         similarity_dot = np.dot(features, persona)

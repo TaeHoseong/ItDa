@@ -8,11 +8,16 @@ class PersonaApiService {
   PersonaApiService({required this.sessionId});
 
   /// 챗봇에게 메시지 전송
-  Future<Map<String, dynamic>> sendMessage(String message, {String? userId}) async {
+  Future<Map<String, dynamic>> sendMessage(
+    String message, {
+    String? userId,
+    double? userLat,
+    double? userLng,
+  }) async {
     try {
       final url = Uri.parse('${ApiConfig.baseUrl}/persona/chat');
 
-      final requestBody = {
+      final requestBody = <String, dynamic>{
         'message': message,
         'session_id': sessionId,
       };
@@ -20,6 +25,12 @@ class PersonaApiService {
       // user_id가 있으면 추가 (사용자별 맞춤 추천을 위함)
       if (userId != null) {
         requestBody['user_id'] = userId;
+      }
+
+      // GPS 위치가 있으면 추가 (위치 기반 추천을 위함)
+      if (userLat != null && userLng != null) {
+        requestBody['user_lat'] = userLat;
+        requestBody['user_lng'] = userLng;
       }
 
       final response = await http.post(
