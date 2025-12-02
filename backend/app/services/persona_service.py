@@ -143,7 +143,7 @@ class PersonaService:
         specific_food = intent["extracted_data"]["food"]
         category = intent["extracted_data"]["category"]
         extra_feature = intent["extracted_data"].get("extra_feature")  # extra_feature는 없을 수 있음
-
+        
         print(f"\n{'='*60}")
         print(f"[RECOMMENDATION START]")
         print(f"   User ID: {user_id}")
@@ -151,7 +151,6 @@ class PersonaService:
         if extra_feature:
             print(f"   Extra Feature: {extra_feature}")
         print(f"{'='*60}\n")
-
         # suggest_service를 통해 추천 장소 가져오기 (user_id와 위치 전달)
         places = self.suggest_service.get_recommendations(
             user_id=user_id,
