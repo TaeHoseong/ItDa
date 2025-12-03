@@ -20,6 +20,7 @@ import 'providers/navigation_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/wishlist_provider.dart';
+import 'providers/avatar_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -109,6 +110,9 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => WishlistProvider(),
         ),
+
+        // 아바타 캐릭터 관리
+        ChangeNotifierProvider(create: (_) => AvatarProvider()),
       ],
       child: const ItdaApp(),
     ),

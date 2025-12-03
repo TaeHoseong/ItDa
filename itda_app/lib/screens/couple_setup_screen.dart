@@ -183,7 +183,7 @@ class _CoupleSetupScreenState extends State<CoupleSetupScreen> {
               TextField(
                 controller: _nicknameController,
                 decoration: InputDecoration(
-                  hintText: '예: 여보, 자기야, 허니, 내사랑...',
+                  hintText: '예: 여보, 자기, 애기야...',
                   filled: true,
                   fillColor: const Color(0xFFFDF8F6),
                   border: OutlineInputBorder(
