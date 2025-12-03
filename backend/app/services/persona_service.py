@@ -1,7 +1,7 @@
 from typing import Dict
 from datetime import datetime, timedelta
 from app.schemas.persona import ChatRequest, ChatResponse
-from app.services.openai_service import analyze_intent
+from app.services.openai_service import analyze_intent, extract_data
 from app.services.suggest_service import SuggestService
 from app.core.supabase_client import get_supabase
 from app.services.course_service import CourseService
@@ -59,16 +59,14 @@ class PersonaService:
 
         if action == "general_chat":
             response_data = self._handle_general_chat(session)
-
         elif action == "update_info":
-            response_data = self._handle_update_info(session, intent)
-
+            response_data = await self._handle_update_info(session, intent, request)
         elif action == "recommend_place":
-            response_data = self._handle_recommend_place(session, intent, request.user_id, request.user_lat, request.user_lng)
+            response_data = await self._handle_recommend_place(session, intent, request, request.user_id, request.user_lat, request.user_lng)
         elif action == "re_recommend_place":
             response_data = self._handle_re_recommend_place(session, intent, request.user_id, request.user_lat, request.user_lng)
         elif action == "select_place":
-            response_data = await self._handle_select_place(session, intent)
+            response_data = await self._handle_select_place(session, intent, request)
         elif action == "generate_course":
             response_data = self._handle_generate_course(session, intent, request.user_id, request.user_lat, request.user_lng)
         elif action == "view_schedule":
@@ -112,20 +110,66 @@ class PersonaService:
             "action_taken": "general_chat"
         }
 
-    def _handle_update_info(self, session: dict, intent: dict) -> dict:
+    async def _handle_update_info(self, session: dict, intent: dict, request: ChatRequest) -> dict:
         """정보 수집 중"""
+        
         missing = self._check_missing_fields(session["pending_data"])
-
+        extracted_data = await extract_data("update_info", request.message)
+        
         print(f"[UPDATE INFO] Collecting information")
-        print(f"   Current data: {session['pending_data']}")
+        print(f"   Updated data: {extracted_data}")
         print(f"   Missing fields: {missing}")
-
-        return {
-            "action_taken": "update_info",
-            "pending_data": session["pending_data"],
-            "missing_fields": missing
+        
+        for field in missing:
+            session["pending_data"][field] = extracted_data[field]
+        
+        
+        schedule_data = {
+            "title": session["pending_data"]["title"],
+            "date": session["pending_data"]["date"],
+            "time": session["pending_data"]["time"],
+            "place_name": session["pending_data"].get("place_name"),
+            "latitude": session["pending_data"].get("latitude"),
+            "longitude": session["pending_data"].get("longitude"),
+            "address": session["pending_data"].get("address"),
+            "duration": session["pending_data"].get("duration", 60)
         }
+        
+        missing = self._check_missing_fields(session["pending_data"])
+        if missing:
+            map = {
+                "title": "일정 이름",
+                "date": "날짜",
+                "time": "시간"
+            }
+            missing_kor = [map[m] for m in missing]
+            improved_message = (
+                "좋아요! 거의 다 왔어요 😊\n"
+                f"아직 {', '.join(missing_kor)} 정보가 필요해요.\n"
+                "추가로 알려주실 수 있을까요?"
+            )
+            return {
+                "action_taken": "need_more_info",
+                "pending_data": session["pending_data"],
+                "missing_fields": missing,
+                "improved_message": improved_message
+            }
 
+        improved_message = (
+            "🎉 일정이 완성되었어요!\n\n"
+            f"📌 제목: {schedule_data['title']}\n"
+            f"📅 날짜: {schedule_data['date']}\n"
+            f"⏰ 시간: {schedule_data['time']}\n"
+        )
+        session["pending_data"] = {}
+        session["recommended_places"] = [] 
+        return {
+                "action_taken": "schedule_ready",
+                "schedule_data": schedule_data,  # 프론트엔드가 이 데이터로 API 호출
+                "improved_message": improved_message
+            }
+
+            
     def _is_complete(self, data: dict) -> bool:
         """필수 정보 완전성 체크"""
         required = ["title", "date", "time"]
@@ -138,12 +182,14 @@ class PersonaService:
         missing = [field for field in required if not data.get(field)]
         return missing
 
-    def _handle_recommend_place(self, session: dict, intent: dict, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
+    async def _handle_recommend_place(self, session: dict, intent: dict, request: ChatRequest, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
         """장소 추천 처리"""
-        specific_food = intent["extracted_data"]["food"]
-        category = intent["extracted_data"]["category"]
-        extra_feature = intent["extracted_data"].get("extra_feature")  # extra_feature는 없을 수 있음
         
+        extracted_data = await extract_data(action=intent['action'], message=request.message)
+        specific_food = extracted_data["specific_food"]
+        category = extracted_data["category"]
+        extra_feature = extracted_data["extra_feature"]  # extra_feature는 없을 수 있음
+
         print(f"\n{'='*60}")
         print(f"[RECOMMENDATION START]")
         print(f"   User ID: {user_id}")
@@ -209,10 +255,10 @@ class PersonaService:
             "count": len(new_places)
         }
         
-    async def _handle_select_place(self, session: dict, intent: dict) -> dict:
+    async def _handle_select_place(self, session: dict, intent: dict, request: ChatRequest) -> dict:
         """장소 선택 및 일정에 추가"""
 
-        extracted = intent.get("extracted_data", {})
+        extracted = await extract_data(action="select_place", message=request.message)
         place_index = extracted.get("place_index")  # 1, 2, 3, 4, 5
         place_name = extracted.get("place_name")  # "스타벅스"
 
