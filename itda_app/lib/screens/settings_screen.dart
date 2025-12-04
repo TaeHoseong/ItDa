@@ -4,7 +4,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import 'auth/login_screen.dart';
-import 'auth/couple_connect_screen.dart'; // 커플 매칭 화면 import
+import 'auth/couple_connect_screen.dart';
+import 'couple_setup_screen.dart';      // 🔥 추가
+import 'survey_screen.dart';         // 🔥 실제 경로에 맞게 수정
 import 'package:itda_app/services/session_store.dart';
 import 'package:itda_app/providers/user_provider.dart';
 
@@ -21,23 +23,14 @@ class SettingsScreen extends StatelessWidget {
     );
 
     try {
-      // 1) Supabase 세션 종료
       await supabase.auth.signOut();
-
-      // 2) 구글 로그인 세션 종료
       try {
         await google.signOut();
       } catch (_) {}
-
-      // 3) SecureStorage 에서 토큰/유저ID 삭제
       await sessionStore.clear();
 
-      // 4) UserProvider 에서 유저 정보 초기화
-      try {
-        context.read<UserProvider>().clear();
-      } catch (_) {}
+      context.read<UserProvider>().clear();
 
-      // 5) 로그인 화면으로 이동
       if (context.mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -46,9 +39,8 @@ class SettingsScreen extends StatelessWidget {
       }
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('로그아웃 중 오류가 발생했습니다: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('로그아웃 중 오류 발생: $e')));
     }
   }
 
@@ -82,9 +74,7 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 현재 유저의 커플 매칭 여부
-    final isCoupleMatched =
-        context.watch<UserProvider>().coupleMatched; // (coupleId != null)
+    final isCoupleMatched = context.watch<UserProvider>().coupleMatched;
 
     return Scaffold(
       appBar: AppBar(
@@ -94,7 +84,7 @@ class SettingsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // 아직 커플 매칭이 안 되어 있을 때만 보이는 메뉴
+          // 🔹 커플 매칭
           if (!isCoupleMatched)
             ListTile(
               leading: const Icon(Icons.favorite_border, color: Colors.pink),
@@ -102,7 +92,7 @@ class SettingsScreen extends StatelessWidget {
                 '커플 매칭하기',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
-              subtitle: const Text('연인의 계정과 연결하고 데이트 추천을 받아요'),
+              subtitle: const Text('연인의 계정과 연결하고 추천을 받아요'),
               onTap: () {
                 Navigator.push(
                   context,
@@ -113,10 +103,49 @@ class SettingsScreen extends StatelessWidget {
               },
             ),
 
-          if (!isCoupleMatched)
-            const Divider(height: 24),
+          if (!isCoupleMatched) const Divider(height: 24),
 
-          // 로그아웃
+          // 🔹 커플 설정 페이지로 이동 (first_met 등 설정)
+          ListTile(
+            leading: const Icon(Icons.edit_calendar, color: Colors.blue),
+            title: const Text(
+              '커플 정보 설정',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: const Text('처음 만난 날짜 등 커플 정보를 수정합니다'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CoupleSetupScreen(),
+                ),
+              );
+            },
+          ),
+
+          const Divider(height: 24),
+
+          // 🔹 설문 페이지
+          ListTile(
+            leading: const Icon(Icons.list_alt_outlined, color: Colors.orange),
+            title: const Text(
+              '취향 설문 다시하기',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: const Text('커플 취향을 다시 설정하고 추천을 새로 받아요'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const SurveyScreen(),  // 경로 맞게 수정
+                ),
+              );
+            },
+          ),
+
+          const Divider(height: 24),
+
+          // 🔹 로그아웃
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
             title: const Text(

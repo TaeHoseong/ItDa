@@ -9,6 +9,8 @@ import '../providers/map_provider.dart';
 import '../providers/navigation_provider.dart';
 import '../providers/chat_provider.dart';
 import '../widgets/date_course_widget.dart';
+import './shop_deco.screen.dart';
+import '../providers/avatar_provider.dart';
 
 class PersonaScreen extends StatefulWidget {
   const PersonaScreen({
@@ -84,6 +86,18 @@ class _PersonaScreenState extends State<PersonaScreen> {
           backgroundColor: const Color(0xFFFAF8F5),
           elevation: 0,
           actions: [
+            // 🔹 옷걸이 아이콘: Shop&Deco 화면으로 이동
+            IconButton(
+              icon: const Icon(Icons.checkroom_outlined),
+              tooltip: 'Shop & Deco',
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ShopDecoScreen(),
+                  ),
+                );
+              },
+            ),
             IconButton(
               icon: const Icon(Icons.refresh),
               tooltip: '대화 초기화',
@@ -188,11 +202,43 @@ class _EmptyState extends StatelessWidget {
         ),
         const Spacer(flex: 1),
         Center(
-          child: Image.asset(
-            'assets/images/mascot.png',
-            width: 200,
-            height: 200,
-            fit: BoxFit.contain,
+          child: Consumer<AvatarProvider>(
+            builder: (context, avatar, _) {
+              return Stack(
+                alignment: Alignment.center,
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 40,
+                    child: Opacity(
+                      opacity: 0.85,
+                      child: Icon(
+                        avatar.selectedItem.icon,
+                        size: 170,
+                        color: Colors.black.withOpacity(0.25),
+                      ),
+                    ),
+                  ),
+                  Image.asset(
+                    'assets/images/new.png',
+                    width: 250,
+                    height: 250,
+                    fit: BoxFit.contain,
+                  ),
+                  if (avatar.selectedItem.front)
+                    Positioned(
+                      bottom: 20,
+                      child: Icon(
+                        avatar.selectedItem.icon,
+                        size: 60,
+                        color: Colors.orangeAccent,
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ),
         const Spacer(flex: 3),
