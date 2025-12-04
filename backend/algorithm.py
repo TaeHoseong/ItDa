@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import json
+from datetime import datetime
 from app.core.supabase_client import get_supabase
 from app.core.extra_features import get_extra_feature_service
 from dotenv import load_dotenv
@@ -46,7 +47,7 @@ def extract_features(place: json, persona):
         print(f"key error | {e} in place: {place.get('name', 'Unknown')}")
         return np.zeros(20), 0, 0  # 수정: 3개 값 반환 (4개 아님)
 
-def recommend_topk(persona, last_recommend=None, candidate_names=None, category=None, extra_feature=None, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4, user_lat=None, user_lng=None):
+def recommend_topk(persona, last_recommend=None, candidate_names=None, date=None, category=None, extra_feature=None, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4, user_lat=None, user_lng=None):
     """
     장소 추천 알고리즘
 
@@ -97,6 +98,7 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, category=
             a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
             c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
             return R * c
+    weekday_map = ["월", "화", "수", "목", "금", "토", "일"]
     for place in places:
         name = place["name"]
         scores = place["features"]
@@ -104,8 +106,17 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, category=
         if last_recommend and name in last_recommend:
             print(f"skip {name} (negative react)")
             continue
-
+        
         # 필터링
+        if date:
+            weekday = weekday_map[int(datetime.strptime(date, "%Y-%m-%d").strftime("%w"))]
+            if place["opening_hours"] is not None:
+                opening_hours = place["opening_hours"][weekday] if place["opening_hours"][weekday] else None
+                
+                if opening_hours is not None:
+                    # open, close = opening_hours['open'], opening_hours['close']
+                    continue
+            
         if category:
             place_category = scores["placeFeatures"]["mainCategory"]
             if place_category[category] < 0.5: 

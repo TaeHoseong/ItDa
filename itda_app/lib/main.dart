@@ -21,6 +21,7 @@ import 'providers/user_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/wishlist_provider.dart';
 import 'providers/avatar_provider.dart';
+import 'providers/turn_by_turn_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -113,6 +114,11 @@ void main() async {
 
         // 아바타 캐릭터 관리
         ChangeNotifierProvider(create: (_) => AvatarProvider()),
+        
+        // 6) 턴바이턴 네비게이션
+        ChangeNotifierProvider(
+          create: (_) => TurnByTurnProvider(),
+        ),
       ],
       child: const ItdaApp(),
     ),

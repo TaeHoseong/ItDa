@@ -122,6 +122,7 @@ class CourseService:
         for config in slot_configs:
             slot = self._recommend_for_slot(
                 user_id=user_id,
+                date=date,
                 slot_config=config,
                 previous_location=previous_location,
                 exclude_places=used_places,  # 중복 제외
@@ -168,6 +169,144 @@ class CourseService:
 
         return course
 
+    def generate_date_course_by_keyword(
+        self,
+        user_id: str,
+        date: str,
+        keyword: str,
+        preferences: Optional[CoursePreferences] = None,
+        user_lat: Optional[float] = None,
+        user_lng: Optional[float] = None
+    ) -> DateCourse:
+        """
+            데이트 코스 생성 메인 함수(특정 장소가 주어졌을 때)
+
+            Args:
+                user_id: 사용자 ID
+                date: 날짜 (YYYY-MM-DD)
+                keyword: 특정 장소
+                preferences: 사용자 커스터마이징 설정
+                user_lat: 사용자 GPS 위도
+                user_lng: 사용자 GPS 경도
+
+            Returns:
+                DateCourse: 생성된 데이트 코스
+        """
+        print(f"\n{'='*60}")
+        print(f"[COURSE GENERATION START]")
+        print(f"   User ID: {user_id}")
+        print(f"   Date: {date}")
+        print(f"   Keyword: {keyword}")
+        print(f"   Preferences: {preferences}")
+        print(f"   User Location: ({user_lat}, {user_lng})")
+        print(f"{'='*60}\n")
+        
+        # 0. keyword 장소 정보 불러오기
+        response = (
+            self.supabase.table("places")
+            .select("*")
+            .ilike("name", f"%{keyword}%")
+            .execute()
+        ).data[0]
+        if not response:
+            return None
+        category = response['features']['placeFeatures']['mainCategory']
+        target_category = [k for k, v in category.items() if v != 0][0]
+
+        # 1. keyword 장소 카테고리를 포함하는 template 선정
+        matched_templates = []
+        template = ""
+        slot_index = 0
+        slot_configs = None
+        for template_name, slots in self.TEMPLATES.items():
+            for i, s in enumerate(slots, 1):
+                if s["category"] == target_category:
+                    matched_templates.append(template_name)
+                    slot_index = i
+                    template = template_name
+                    break
+        slot_configs = self.TEMPLATES[template].copy()
+        if preferences:
+            slot_configs = self._apply_preferences(slot_configs, preferences)
+    
+        # 2. 해당하는 슬롯에 keyword 장소 배치 후 코스 추천
+        slots = []
+        if not response['latitude'] or not response['longitude']:
+            target_location = (user_lat, user_lng)
+        else:
+            target_location = (response['latitude'], response['longitude'])
+
+        total_distance = 0.0
+        used_places =  []
+        prev_location = ()
+        for i, config in enumerate(slot_configs, 1):
+            if i == slot_index:
+                distance = 0
+                if i != 1:
+                    distance = self._calculate_distance(
+                        prev_location[0], prev_location[1],
+                        response["latitude"], response["longitude"])
+                slot = CourseSlot(
+                    slot_type=config["slot_type"],
+                    category=target_category,
+                    start_time=config["start_time"],
+                    duration=config["duration"],
+                    emoji=config["emoji"],
+                    place_name=response["name"],
+                    place_address=response.get("address"),
+                    latitude=response["latitude"],
+                    longitude=response["longitude"],
+                    rating=response.get("rating"),
+                    price_range=response.get("price_range"),
+                    score=1,
+                    distance_from_previous=None
+                )
+            else:
+                slot = self._recommend_for_slot(
+                    user_id=user_id,
+                    date=date,
+                    slot_config=config,
+                    previous_location=previous_location,
+                    exclude_places=used_places,  # 중복 제외
+                    user_lat=response["latitude"],
+                    user_lng=response["longitude"]
+                )
+
+            if slot:
+                slots.append(slot)
+                used_places.append(slot.place_name)  # 사용된 장소 추가
+                previous_location = (slot.latitude, slot.longitude)
+                if slot.distance_from_previous:
+                    total_distance += slot.distance_from_previous
+        if not slots:
+            raise ValueError("코스 생성 실패: 추천된 장소가 없습니다.")
+
+        total_duration = sum(slot.duration for slot in slots)
+        start_time = slots[0].start_time
+
+        # 종료 시간 계산
+        start_dt = datetime.strptime(start_time, "%H:%M")
+        end_dt = start_dt + timedelta(minutes=total_duration)
+        end_time = end_dt.strftime("%H:%M")
+
+        course = DateCourse(
+            date=date,
+            template=template,
+            slots=slots,
+            total_distance=round(total_distance, 2),
+            total_duration=total_duration,
+            start_time=start_time,
+            end_time=end_time
+        )
+
+        print(f"\n{'='*60}")
+        print(f"[COURSE GENERATION COMPLETE]")
+        print(f"   Template: {template}")
+        print(f"   Slots: {len(slots)}")
+        print(f"   Total Distance: {course.total_distance}km")
+        print(f"   Total Duration: {course.total_duration}min ({start_time} - {end_time})")
+        print(f"{'='*60}\n")
+        return course
     def _select_template_by_persona(self, user_id: str) -> str:
         """
         페르소나 기반 템플릿 자동 선택
@@ -308,6 +447,7 @@ class CourseService:
     def _recommend_for_slot(
         self,
         user_id: str,
+        date: str,
         slot_config: Dict,
         previous_location: Optional[Tuple[float, float]] = None,
         exclude_places: Optional[List[str]] = None,
@@ -347,6 +487,7 @@ class CourseService:
             for k in [10, 20, 30, 50]:  # 점진적으로 증가
                 places = self.suggest_service.get_recommendations(
                     user_id=user_id,
+                    date=date,
                     category=category,
                     specific_food=keyword,
                     extra_feature=extra_feature,

@@ -103,10 +103,13 @@ food와 category는 둘 다 추출할 수 있다.
 "분위기 좋은 카페 추천해줘" → recommend_place (category: cafe, extra_feature: atmosphere_romantic)
 "조용한 식당 알려줘" → recommend_place (category: food, extra_feature: atmosphere_quiet)
 "별점 높은 맛집 추천해줘" → recommend_place (category: food, extra_feature: rating_high)
+"멀리 있는 카페 추천해줘" → recommend_place (category: cafe, extra_feature: distance_far)
+"근처 카페 추천해줘" → recommend_place (category: cafe, extra_feature: distance_short)
 "내 일정 보여줘" → view_schedule (timeframe: all)
 "오늘 일정 뭐있어?" → view_schedule (timeframe: today)
 "이번 주 일정" → view_schedule (timeframe: this_week)
 "내일 데이트 코스 추천해줘" → generate_course (date: 내일, template: auto)
+"내일 인천문화예술회관 주변 데이트코스 추천해줘" → generate_course (date: 내일, template: auto, keyword: 인천문화예술회관)
 "1번 슬롯 다른 장소로" → regenerate_course_slot (slot_index: 1)
 "1번 슬롯 파스타맛집으로" -> regenerate_course_slot (slot_index:1, category: "food", keyword: 파스타맛집)
 "카페 다른 곳으로" → regenerate_course_slot (slot_index를 카페 슬롯 번호로 추출)
@@ -125,7 +128,7 @@ async def analyze_intent(message: str, context: dict = None, history: list = Non
     """의도 분석 - 개선된 버전"""
 
     system_prompt = get_system_prompt()
-
+    print(system_prompt)
     messages = [{"role": "system", "content": system_prompt}]
 
     # 🔥 대화 히스토리 더 많이 포함 (2턴 → 6턴)

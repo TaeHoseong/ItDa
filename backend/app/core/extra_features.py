@@ -142,19 +142,19 @@ class ExtraFeatureService:
         if config["type"] == "weight":
             weight_name = config["weight_name"]
             weight_value = config["value"]
-
-            if weight_name == "gamma":
-                gamma = weight_value
-                print(f"[EXTRA_FEATURE] Applied {extra_feature}: gamma = {weight_value}")
-            elif weight_name == "delta":
-                delta = weight_value
-                print(f"[EXTRA_FEATURE] Applied {extra_feature}: delta = {weight_value}")
-            elif weight_name == "alpha":
+            
+            if weight_name == "alpha":
                 alpha = weight_value
                 print(f"[EXTRA_FEATURE] Applied {extra_feature}: alpha = {weight_value}")
             elif weight_name == "beta":
                 beta = weight_value
                 print(f"[EXTRA_FEATURE] Applied {extra_feature}: beta = {weight_value}")
+            elif weight_name == "gamma":
+                gamma = weight_value
+                print(f"[EXTRA_FEATURE] Applied {extra_feature}: gamma = {weight_value}")
+            elif weight_name == "delta":
+                delta = weight_value
+                print(f"[EXTRA_FEATURE] Applied {extra_feature}: delta = {weight_value}")
 
         return list(persona), alpha, beta, gamma, delta
 
