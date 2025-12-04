@@ -20,6 +20,7 @@ import 'providers/navigation_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/wishlist_provider.dart';
+import 'providers/avatar_provider.dart';
 import 'providers/turn_by_turn_provider.dart';
 
 void main() async {
@@ -111,6 +112,9 @@ void main() async {
           create: (_) => WishlistProvider(),
         ),
 
+        // 아바타 캐릭터 관리
+        ChangeNotifierProvider(create: (_) => AvatarProvider()),
+        
         // 6) 턴바이턴 네비게이션
         ChangeNotifierProvider(
           create: (_) => TurnByTurnProvider(),
