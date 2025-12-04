@@ -1,7 +1,7 @@
 from typing import Dict
 from datetime import datetime, timedelta
 from app.schemas.persona import ChatRequest, ChatResponse
-from app.services.openai_service import analyze_intent, extract_data
+from app.services.openai_service import analyze_intent, extract_data, summarize_schedule
 from app.services.suggest_service import SuggestService
 from app.core.supabase_client import get_supabase
 from app.services.course_service import CourseService
@@ -68,12 +68,12 @@ class PersonaService:
         elif action == "select_place":
             response_data = await self._handle_select_place(session, intent, request)
         elif action == "generate_course":
-            response_data = self._handle_generate_course(session, intent, request.user_id, request.user_lat, request.user_lng)
+            response_data = await self._handle_generate_course(session, intent, request, request.user_id, request.user_lat, request.user_lng)
         elif action == "view_schedule":
-            response_data = self._handle_view_schedule(session, intent, request.user_id)
+            response_data = await self._handle_view_schedule(session, intent, request, request.user_id)
         elif action == "regenerate_course_slot":
             print(f"\n[ACTION] Calling _handle_regenerate_course_slot")
-            response_data = self._handle_regenerate_course_slot(session, intent, request.user_id, request.user_lat, request.user_lng)
+            response_data = await self._handle_regenerate_course_slot(session, intent, request, request.user_id, request.user_lat, request.user_lng)
             print(f"[ACTION] Response data keys: {response_data.keys() if response_data else None}")
 
         # improved_message가 있으면 그걸 사용, 없으면 intent["message"] 사용
@@ -350,7 +350,7 @@ class PersonaService:
                 "improved_message": improved_message
             }
 
-    def _handle_generate_course(self, session: dict, intent: dict, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
+    async def _handle_generate_course(self, session: dict, intent: dict, request: ChatRequest, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
         """데이트 코스 생성 처리"""
 
         # pending_data 초기화
@@ -362,7 +362,7 @@ class PersonaService:
                 "message": "로그인이 필요합니다."
             }
 
-        extracted = intent.get("extracted_data", {})
+        extracted = await extract_data("generate_course", message=request.message)
 
         # 날짜 추출 (기본값: 오늘)
         date_str = extracted.get("date")
@@ -377,7 +377,7 @@ class PersonaService:
         start_time = extracted.get("start_time")
         duration = extracted.get("duration")
         exclude_slots = extracted.get("exclude_slots")
-        keyword = extracted.get("keyword")
+        keyword = extracted.get("keyword", "")
         if start_time or duration or exclude_slots:
             preferences = CoursePreferences(
                 start_time=start_time,
@@ -480,7 +480,7 @@ class PersonaService:
                 "message": f"코스 생성 중 오류가 발생했습니다: {str(e)}"
             }
 
-    def _handle_regenerate_course_slot(self, session: dict, intent: dict, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
+    async def _handle_regenerate_course_slot(self, session: dict, intent: dict, request: ChatRequest, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
         """코스의 특정 슬롯 재생성 처리"""
 
         # 세션에 저장된 코스 확인
@@ -496,7 +496,7 @@ class PersonaService:
                 "message": "로그인이 필요합니다."
             }
 
-        extracted = intent.get("extracted_data", {})
+        extracted = await extract_data("regenerate_course_slot", request.message)
         slot_index = extracted.get("slot_index")
         category = extracted.get("category")
         keyword = extracted.get("keyword")
@@ -514,8 +514,8 @@ class PersonaService:
         print(f"\n{'='*60}")
         print(f"[REGENERATE SLOT] #{slot_index}")
         print(f"   User Location: ({user_lat}, {user_lng})")
-        if extra_feature:
-            print(f"[EXTRA_FEATURE] {extra_feature}")
+        if extracted:
+            print(f"[EXTRACTED] {extracted}")
         print(f"{'='*60}\n")
 
         try:
@@ -599,7 +599,7 @@ class PersonaService:
                 "message": f"슬롯 재생성 중 오류가 발생했습니다: {str(e)}"
             }
             
-    def _handle_view_schedule(self, session: dict, intent: dict, user_id: str = None) -> dict:
+    async def _handle_view_schedule(self, session: dict, intent: dict, request: ChatRequest, user_id: str = None) -> dict:
         """일정 조회 처리"""
 
         # pending_data 초기화 (일정 조회는 독립적인 액션)
@@ -617,7 +617,7 @@ class PersonaService:
                 "message": "로그인이 필요합니다."
             }
 
-        extracted = intent.get("extracted_data", {})
+        extracted = await extract_data("view_schedule", request.message )
         timeframe = extracted.get("timeframe", "all")
 
         print(f"\n{'='*60}")
@@ -652,26 +652,7 @@ class PersonaService:
 
         print(f"[FOUND] {len(schedules)} schedule(s)")
 
-        # 일정 포맷팅
-        formatted_message = None
-        formatted_message = ""
-        if len(schedules) == 0:
-            # TODO: 일정이 없을 경우 "일정을 알려드릴게요!"하는 에러 처리용. 임시이므로 좀 더 개선 필요 (홍재형) 
-            formatted_message = f"{timeframe}에는 아직 일정이 없어요!"
-        else:
-            for i, schedule in enumerate(schedules, 1):
-                schedule_lines = []
-                for idx, slot in enumerate(schedule, 1):
-                    time_str = slot['time'] if slot['time'] else "시간 미정"
-                    duration = slot['duration'] if slot['duration'] else ""
-
-                    place_str = f" @ {slot['place_name']}" if ['place_name'] else ""
-
-                    schedule_lines.append(
-                        f"-{idx}. [{time_str} for {duration}min.]{place_str}"
-                    )
-                
-                formatted_message += "\n"+ f"{i}번째 일정:\n" + "\n".join(schedule_lines)
+        formatted_message = await summarize_schedule(schedules, timeframe)
 
         # 응답 데이터 준비
         # 11.21 : schedules_data 일단 주석처리. 이거 어디 쓰이는건지?
