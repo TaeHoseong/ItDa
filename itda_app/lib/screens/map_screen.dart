@@ -1219,8 +1219,21 @@ class _MapScreenState extends State<MapScreen> {
             ),
             onMapReady: (controller) async {
               _mapController = controller;
-              mapProvider.ensureInitialized();
+              final pos = await LocationService.getCurrentPosition();
+              final userPos = pos != null ? NLatLng(pos.latitude, pos.longitude) : null;
+              mapProvider.ensureInitialized(userPos);
 
+              if (userPos != null) {
+                await controller.updateCamera(
+                  NCameraUpdate.fromCameraPosition(
+                    NCameraPosition(
+                      target: userPos,
+                      zoom: 15,
+                    ),
+                  ),
+                );
+              }
+              
               // 현재 GPS 위치 가져와서 오버레이 표시
               await _initLocationOverlay(controller);
 

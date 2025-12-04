@@ -24,7 +24,6 @@ class MapMarker {
 }
 
 class MapProvider extends ChangeNotifier {
-  // 기본 카메라 위치 (서울시청)
   NLatLng _cameraTarget = const NLatLng(37.5666, 126.9790);
   double _zoom = 14.0;
 
@@ -63,20 +62,21 @@ class MapProvider extends ChangeNotifier {
   bool get hasTransitFallback => _hasTransitFallback;
 
   /// 최초 1회 마커/상태 세팅
-  void ensureInitialized() {
+  void ensureInitialized(curPosition) {
     if (_initialized) return;
 
+    _cameraTarget = curPosition;
     _markers.add(
       MapMarker(
-        id: 'city_hall',
+        id: 'user_location',
         position: _cameraTarget,
-        caption: '서울시청',
+        caption: '내 위치',
       ),
     );
 
     _initialized = true;
     if (kDebugMode) {
-      print('MapProvider: 초기화 완료 (서울시청 마커 추가)');
+      print('MapProvider: 초기화 완료 현재위치 마커 추가)');
     }
   }
 
@@ -90,7 +90,7 @@ class MapProvider extends ChangeNotifier {
   /// ScheduleProvider의 일정들로 마커 생성
   void syncMarkersWithSchedules(List<DateCourse> courses) {
     // 기존 마커 제거 (초기화용 마커 제외)
-    _markers.removeWhere((m) => m.id != 'city_hall');
+    _markers.removeWhere((m) => m.id != 'user_location');
 
     for (final course in courses) {
       DateTime? courseDate;
