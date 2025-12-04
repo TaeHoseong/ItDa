@@ -447,8 +447,8 @@ class CourseService:
     def _recommend_for_slot(
         self,
         user_id: str,
-        date: str,
         slot_config: Dict,
+        date: str = "",
         previous_location: Optional[Tuple[float, float]] = None,
         exclude_places: Optional[List[str]] = None,
         keyword: str = None,
