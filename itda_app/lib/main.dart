@@ -48,7 +48,7 @@ void main() async {
 
   // Supabase 초기화
   await Supabase.initialize(
-    url: 'https://mzvrpbrwmtmgxtjbdbik.supabase.co',
+    url: SUPABASE_URL,
     anonKey: SUPABASE_KEY,
   );
 

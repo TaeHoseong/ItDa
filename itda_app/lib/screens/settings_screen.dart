@@ -8,6 +8,7 @@ import 'auth/couple_connect_screen.dart';
 import 'couple_setup_screen.dart';      // 🔥 추가
 import 'survey_screen.dart';         // 🔥 실제 경로에 맞게 수정
 import 'package:itda_app/services/session_store.dart';
+import 'package:itda_app/services/api_config.dart';
 import 'package:itda_app/providers/user_provider.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -18,8 +19,7 @@ class SettingsScreen extends StatelessWidget {
     final sessionStore = SessionStore();
     final google = GoogleSignIn(
       scopes: ['email', 'profile'],
-      serverClientId:
-          '545845229063-okupe6in5bos5lkb9n4apc18t62hpqj1.apps.googleusercontent.com',
+      serverClientId: ApiConfig.googleServerClientId,
     );
 
     try {
