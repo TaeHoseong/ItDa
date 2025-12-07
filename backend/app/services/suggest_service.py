@@ -216,14 +216,16 @@ class SuggestService:
                 gamma=gamma,
                 delta=delta,
                 user_lat=user_lat,
-                user_lng=user_lng
+                user_lng=user_lng,
+                user_id=user_id,
+                include_user_places=True
             )
         except Exception as e:
             print(f"[ERROR] algorithm.recommend_topk failed: {e}")
             import traceback
             traceback.print_exc()
 
-        # results는 [(name, score), ...] 형태
+        # results는 [(name, score, source), ...] 형태
         # DB에서 상세 정보를 가져와서 병합
         places = (
             self.supabase
@@ -233,10 +235,27 @@ class SuggestService:
         )
         places = places.data or []
 
+        # 개인 장소도 조회 (user_id가 있을 때만)
+        user_places_data = []
+        if user_id:
+            user_places_response = (
+                self.supabase
+                .table("user_places")
+                .select("*")
+                .eq("user_id", user_id)
+                .execute()
+            )
+            user_places_data = user_places_response.data or []
+
         formatted_results = []
 
-        for name, score in results:
-            detail = next((p for p in places if p["name"] == name), None)
+        for name, score, source in results:
+            # source에 따라 다른 테이블에서 조회
+            if source == "user_place":
+                detail = next((p for p in user_places_data if p["name"] == name), None)
+            else:
+                detail = next((p for p in places if p["name"] == name), None)
+
             if not detail:
                 continue
 
@@ -250,6 +269,7 @@ class SuggestService:
                 "rating": detail.get("rating"),
                 "price_range": detail.get("price_range"),
                 "opening_hours": detail.get("opening_hours"),
+                "source": source,  # "official" or "user_place"
             }
             formatted_results.append(place_info)
 
