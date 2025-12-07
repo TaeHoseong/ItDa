@@ -47,7 +47,7 @@ def extract_features(place: json, persona):
         print(f"key error | {e} in place: {place.get('name', 'Unknown')}")
         return np.zeros(20), 0, 0  # 수정: 3개 값 반환 (4개 아님)
 
-def recommend_topk(persona, last_recommend=None, candidate_names=None, date=None, category=None, extra_feature=None, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4, user_lat=None, user_lng=None):
+def recommend_topk(persona, last_recommend=None, candidate_names=None, date=None, category=None, extra_feature=None, k=3, alpha=0.8, beta=0.7, gamma=0.2, delta=0.4, user_lat=None, user_lng=None, user_id=None, include_user_places=True):
     """
     장소 추천 알고리즘
 
@@ -61,6 +61,8 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, date=None
         alpha~delta: 스코어 가중치
         user_lat: 사용자 위도 (None이면 DEFAULT_POSITION 사용)
         user_lng: 사용자 경도 (None이면 DEFAULT_POSITION 사용)
+        user_id: 개인 장소 조회를 위한 사용자 ID
+        include_user_places: 개인 장소 포함 여부 (기본값: True)
     """
     # 사용자 위치 설정 (GPS 좌표가 없으면 기본 위치 사용)
     if user_lat is not None and user_lng is not None:
@@ -80,8 +82,38 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, date=None
         filter_config = service.get_filter_config(extra_feature)
 
     supabase = get_supabase()
+
+    # 1. 공식 장소 (places)
     response = supabase.table("places").select("*").execute()
-    places = response.data
+    places = response.data or []
+
+    # 2. 개인 장소 (user_places) - user_id가 있고 include_user_places가 True일 때만
+    user_places = []
+    if include_user_places and user_id:
+        user_places_response = supabase.table("user_places") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .in_("features_status", ["default", "completed"]) \
+            .execute()
+        user_places = user_places_response.data or []
+        print(f"📍 개인 장소 {len(user_places)}개 포함")
+
+    # 3. 통합 (개인 장소에 source 표시, 중복 제거)
+    all_places = []
+    seen_names = set()
+
+    # 공식 장소 먼저 (우선순위 높음)
+    for p in places:
+        p["_source"] = "official"
+        all_places.append(p)
+        seen_names.add(p["name"])
+
+    # 개인 장소 (공식 장소에 없는 것만)
+    for p in user_places:
+        if p["name"] not in seen_names:
+            p["_source"] = "user_place"
+            all_places.append(p)
+            seen_names.add(p["name"])
 
     scores_total = []
     def cos_similarity(A, B):
@@ -99,7 +131,7 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, date=None
             c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
             return R * c
     weekday_map = ["월", "화", "수", "목", "금", "토", "일"]
-    for place in places:
+    for place in all_places:
         name = place["name"]
         scores = place["features"]
         latitude, longitude = place["latitude"], place["longitude"]
@@ -110,9 +142,10 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, date=None
         # 필터링
         if date:
             weekday = weekday_map[int(datetime.strptime(date, "%Y-%m-%d").strftime("%w"))]
-            if place["opening_hours"] is not None:
-                opening_hours = place["opening_hours"][weekday] if place["opening_hours"][weekday] else None
-                
+            place_opening_hours = place.get("opening_hours")
+            if place_opening_hours is not None:
+                opening_hours = place_opening_hours.get(weekday)
+
                 if opening_hours is not None:
                     # open, close = opening_hours['open'], opening_hours['close']
                     continue
@@ -151,7 +184,8 @@ def recommend_topk(persona, last_recommend=None, candidate_names=None, date=None
         # print(similarity_euclid, similarity_cos, similarity_dot)
         similarity = similarity_cos
         score = alpha*similarity - beta*distance + gamma*rating + delta*price
-        scores_total.append((name, score))
+        source = place.get("_source", "official")
+        scores_total.append((name, score, source))
 
         
     sorted_results = sorted(scores_total, key=lambda x: x[1], reverse=True)
@@ -161,5 +195,5 @@ if __name__ == '__main__':
     for i, persona in enumerate(personas):
         print(f"------persona {i+1}--------")
         results = recommend_topk(persona, k=10)
-        for place in results:
-            print(f"당신에게 딱 맞는 장소는 {place[0]}이고, {place[1]:.2f}점의 점수로 추천되었습니다")
+        for name, score, source in results:
+            print(f"당신에게 딱 맞는 장소는 {name}이고, {score:.2f}점의 점수로 추천되었습니다 ({source})")
