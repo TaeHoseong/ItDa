@@ -275,9 +275,16 @@ class UserPlaceService:
             "added_from": data["added_from"]
         }
 
-        result = self.supabase.table("user_places") \
+        self.supabase.table("user_places") \
             .insert(new_place) \
-            .select() \
+            .execute()
+
+        # 삽입된 데이터 다시 조회
+        inserted = self.supabase.table("user_places") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .eq("place_hash", place_hash) \
+            .single() \
             .execute()
 
         # 5. place_adoption_candidates 업데이트 (실패해도 진행)
@@ -286,7 +293,7 @@ class UserPlaceService:
         except Exception as e:
             print(f"[WARNING] adoption_candidate 업데이트 실패: {e}")
 
-        return result.data[0]
+        return inserted.data
 
     def _update_adoption_candidate(self, place_hash: str, user_id: str, data: dict):
         """승격 후보 테이블 업데이트 (atomic operation via RPC)"""
@@ -340,14 +347,11 @@ class UserPlaceService:
         place_hash = place["place_hash"]
 
         # 2. user_places에서 삭제
-        result = self.supabase.table("user_places") \
+        self.supabase.table("user_places") \
             .delete() \
             .eq("user_id", user_id) \
             .eq("user_place_id", user_place_id) \
             .execute()
-
-        if not result.data:
-            return False
 
         # 3. adoption_candidate에서 user_id 제거 (실패해도 진행)
         try:
