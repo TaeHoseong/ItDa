@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-def get_system_prompt():
+def get_intent_system_prompt():
     """간결하고 효과적인 시스템 프롬프트"""
     today = datetime.now()
     tomorrow = today + timedelta(days=1)
@@ -23,7 +23,7 @@ def get_system_prompt():
 모레: {day_after.strftime('%Y-%m-%d (%A)')}
 
 ## 역할
-사용자의 말을 이해하고 일정을 관리하고 장소를 추천해주세요. 오타나 구어체도 자연스럽게 이해하세요.
+사용자의 말을 이해하고 사용자가 어떠한 액션을 원하는지 알아내주세요. 오타나 구어체도 자연스럽게 이해하세요.
 
 ## 액션 종류
 1. **general_chat**: 일반 대화 (인사, 감사 등)
@@ -33,66 +33,11 @@ def get_system_prompt():
 5. **generate_course**: 하루 데이트 코스 추천 요청
 6. **regenerate_course_slot**: 코스의 특정 슬롯 재생성 (예: "1번 슬롯 다른 장소로", "카페 다른 곳으로")
 7. **view_schedule**: 일정 조회 요청
-
-## 정보 추출
-- 날짜: "내일"→{tomorrow.strftime('%Y-%m-%d')}, "모레"→{day_after.strftime('%Y-%m-%d')}
-- 시간: "오후 3시"→15:00, "저녁 7시"→19:00, "3시"→15:00
-- 제목: 회의, 운동, 약속 등 일정 관련 명사
-- 카테고리: 유저가 추천받기 원하는 카테고리
-### 카테고리 추출 규칙
-사용자의 메시지에 아래 키워드가 포함되면 category를 다음 값으로 설정한다.
-
-- food:
-  ["맛집", "밥집", "레스토랑", "식당", "한식", "중식", "일식",
-   "파스타", "버거", "이탈리안", "카레", "초밥", "라멘"]
-- cafe:
-  ["카페", "카페 추천", "브런치", "디저트"]
-- culture_art:
-  ["전시", "뮤지엄", "미술관", "공연", "연극", "아트", "갤러리"]
-- activity_sports:
-  ["운동", "러닝", "배드민턴", "볼링", "클라이밍", "헬스", "스포츠"]
-- nature_healing:
-  ["산책", "공원", "바다", "호수", "자연", "힐링"]
-- craft_experience:
-  ["도자기", "만들기", "체험", "공방", "원데이클래스"]
-- shopping:
-  ["쇼핑", "몰", "아울렛", "백화점", "마켓"]
-
-메시지에 여러 키워드가 있어도 가장 명확한 하나만 할당한다.
-food와 category는 둘 다 추출할 수 있다.
-예: "파스타 맛집 추천해줘" → category: food, food: "파스타"
-
-- 음식: 음식 관련된 키워드 "파스타 맛집 추천해줘"→"파스타"
-### 음식 키워드 추출 규칙
-- 사용자의 메시지에 특정 음식/식당/메뉴가 언급되면 무조건 extracted_data.food로 추출한다.
-- 예: "한식", "일식", "중식", "고기집", "파스타", "버거", "카레", "초밥", "라멘", "카페" 등
-- "카페 추천해줘"와 같이 들어올 경우 카페를 추출해야해 
-- "맛집 추천", "어디 갈까?"처럼 음식이 없는 경우 food는 null로 둔다.
-- 단순한 수식이 아니라 정확한 문자열("한식", "파스타")로 추출한다.
-
+8. **update_info**: 정보 업데이트
 ## 응답 형식 (JSON)
 {{
   "action": "액션명",
   "message": "사용자에게 보여줄 친근한 메시지",
-  "extracted_data": {{
-    "title": "일정 제목 또는 null",
-    "date": "YYYY-MM-DD 또는 null",
-    "time": "HH:MM 또는 null",
-    "category": "(food, cafe, culture_art, activity_sports, nature_healing, craft_experience, shoping) 중 하나"
-    "food": "유저가 원하는 음식",
-    "old_value": "수정시 기존값",
-    "new_value": "수정시 새값",
-    "field": "수정 필드(time/date/title)",
-    "action_type": "modify 또는 cancel",
-    "timeframe": "일정 조회 범위 (today/tomorrow/this_week/all)",
-    "course_template": "코스 템플릿 (auto/full_day/half_day_lunch/half_day_dinner/cafe_date/active_date/culture_date)",
-    "start_time": "코스 시작 시간 (HH:MM)",
-    "duration": "코스 총 시간 (분 단위, 예: 240)",
-    "exclude_slots": "제외할 슬롯 타입 리스트 (예: [\"activity\"])",
-    "slot_index": "재생성할 슬롯 번호 (1부터 시작, 예: 1, 2, 3)",
-    "keyword": "유저가 바라는 특정 장소",
-    {get_extra_feature_service().get_prompt_fragment()}
-  }}
 }}
 
 ## 예시
@@ -100,35 +45,268 @@ food와 category는 둘 다 추출할 수 있다.
 "파스타 맛집 추천해줘" → recommend_place (장소 추천)
 "데이트 장소 알려줘" → recommend_place (장소 추천)
 "어디 갈까?" → recommend_place (장소 추천)
-"분위기 좋은 카페 추천해줘" → recommend_place (category: cafe, extra_feature: atmosphere_romantic)
-"조용한 식당 알려줘" → recommend_place (category: food, extra_feature: atmosphere_quiet)
-"별점 높은 맛집 추천해줘" → recommend_place (category: food, extra_feature: rating_high)
-"멀리 있는 카페 추천해줘" → recommend_place (category: cafe, extra_feature: distance_far)
-"근처 카페 추천해줘" → recommend_place (category: cafe, extra_feature: distance_short)
-"내 일정 보여줘" → view_schedule (timeframe: all)
-"오늘 일정 뭐있어?" → view_schedule (timeframe: today)
-"이번 주 일정" → view_schedule (timeframe: this_week)
-"내일 데이트 코스 추천해줘" → generate_course (date: 내일, template: auto)
-"내일 인천문화예술회관 주변 데이트코스 추천해줘" → generate_course (date: 내일, template: auto, keyword: 인천문화예술회관)
-"1번 슬롯 다른 장소로" → regenerate_course_slot (slot_index: 1)
-"1번 슬롯 파스타맛집으로" -> regenerate_course_slot (slot_index:1, category: "food", keyword: 파스타맛집)
-"카페 다른 곳으로" → regenerate_course_slot (slot_index를 카페 슬롯 번호로 추출)
-"분위기 좋은 카페로" → regenerate_course_slot (category: cafe, extra_feature: atmosphere_romantic)
-"조용한 곳으로" → regenerate_course_slot (extra_feature: atmosphere_quiet)
-"별점 높은 식당으로" → regenerate_course_slot (category: food, extra_feature: rating_high)
-"트렌디한 식당으로" → regenerate_course_slot (category: food, extra_feature: atmosphere_trendy)
-"저렴한 곳으로" → regenerate_course_slot (extra_feature: price_cheap)
-"카페 위주 반나절 코스" → generate_course (template: cafe_date)
-"하루 데이트 코스 짜줘" → generate_course (template: auto)
-"오후 2시부터 4시간 코스" → generate_course (start_time: 14:00, duration: 240)
+"내 일정 보여줘" → view_schedule
+"오늘 일정 뭐있어?" → view_schedule
+"이번 주 일정" → view_schedule
+"1번 장소 맘에 들어" → select_place
+"내일 데이트 코스 추천해줘" → generate_course
+"1번 슬롯 다른 장소로" → regenerate_course_slot
+"1번 슬롯 파스타맛집으로" -> regenerate_course_slot
+"카페 다른 곳으로" → regenerate_course_slot
+"카페 위주 반나절 코스" → generate_course
+"하루 데이트 코스 짜줘" → generate_course
+"오후 2시부터 4시간 코스" → generate_course
+"내일 8시에 갈래" → update_info (select place 이후에만 가능)
 
 유연하게 이해하고, 자연스러운 한국어로 응답하세요."""
+
+def get_action_prompt(action:str):
+    today = datetime.now()
+    tomorrow = today + timedelta(days=1)
+    day_after = today + timedelta(days=2)
+    prompt = ""
+    if action == 'recommend_place':
+        prompt = f"""
+            당신은 장소 추천을 위한 파라미터 추출기입니다.
+            사용자 입력에서 다음 세 가지 값을 JSON으로 추출하세요:
+            메시지에 여러 키워드가 있어도 가장 명확한 하나만 할당한다.
+            food와 category는 둘 다 추출할 수 있다.
+            예: "파스타 맛집 추천해줘" → category: food, food: "파스타"
+            
+            1. specific_food  
+            - 사용자가 특정 음식/메뉴를 언급했을 때만 값 설정  
+            - 예: 파스타, 초밥, 라멘, 스테이크  
+            - 없다면 null
+
+            2. category  
+            - 입력 문맥에서 주요 카테고리를 유추  
+            - food / cafe / culture_art / activity_sports / nature_healing / craft_experience / shopping 중 하나  
+            - 없다면 null
+            
+            3. {get_extra_feature_service().get_prompt_fragment()}
+
+            출력 형식(중요!):
+            {{
+            "specific_food": "...",
+            "category": "...",
+            "extra_feature": "..."
+            }}
+        """
+    elif action == "select_place":
+        prompt = """
+        당신은 사용자의 선택 문장을 이해하고 아래 두 값을 JSON 형태로 추출하는 모델입니다.
+
+        ## 해야 할 일
+        사용자가 추천된 장소 중 어떤 것을 선택했는지 분석하여 다음 정보를 JSON으로 반환하세요:
+
+        - place_index: 사용자가 말한 번호 (정수, 없으면 null)
+        - place_name: 사용자가 직접 말한 장소 이름 (문자열, 없으면 null)
+
+        ## 추출 규칙
+        1. 사용자가 “1번”, “#2”, “3번 장소”, “2번 추천” 등 번호를 말하면 place_index에 정수를 넣으세요.
+        2. 장소 이름을 직접 말하면 place_name에 넣으세요.
+        3. 둘 다 말하면 둘 다 채웁니다.
+        4. 둘 다 없으면 둘 다 null로 반환하세요.
+        5. 번호는 한글/기호 모두 지원:
+        - "1번", "1 번", "#1", "번호 1", "첫 번째" → 1
+        - "두 번째", "세 번째" → 2, 3
+        6. 장소 이름은 문장 속에서 자연어로 등장하는 부분을 그대로 추출합니다.
+
+        ## 응답 형식(JSON)
+        {
+        "place_index": 1,
+        "place_name": "스타벅스"
+        }
+            """
+    elif action == "update_info":
+        prompt = f"""
+        오늘: {today.strftime('%Y-%m-%d (%A)')}
+        내일: {tomorrow.strftime('%Y-%m-%d (%A)')}
+        모레: {day_after.strftime('%Y-%m-%d (%A)')}
+        당신은 한국어 문장에서 날짜(date), 시간(time), 제목(title)을 추출하는 AI입니다.  
+        사용자의 메세지에서 필요한 정보를 구조화된 JSON으로 반환하세요.
+
+        ### 규칙
+        1. 날짜(date)
+        - YYYY-MM-DD 형식으로 변환
+        - "오늘", "내일", "모레", "이번 주 금요일", "다음 주 화요일" 모두 처리
+        - 숫자 날짜: "3월 5일", "12/28", "5일", "25일" 처리
+        - 연도가 없으면 올해 혹은 다음 날짜로 자연스럽게 해석
+
+        2. 시간(time)
+        - HH:MM 형식으로 변환
+        - "오전/오후", "AM/PM", "정오", "자정", "저녁 7시", "밤 10시 반", "3시 반" 모두 처리
+        - 분이 생략된 경우 00분으로 설정
+        - "30분", "반" → :30 로 해석
+
+        3. 제목(title)
+        문맥상 "무엇을 위한 일정인지" 추출
+        예: 약속, 데이트, 점심, 저녁식사, 수업, 운동, 회의 등
+        명확하지 않으면 null
+
+        4. 비어 있는 경우 null로 출력
+
+        ### 출력 형식(JSON)
+        {{
+            "title": string or null,
+            "date": string or null,
+            "time": string or null
+        }}
+
+        """
+    elif action == "generate_course":
+        prompt = f"""
+        오늘: {today.strftime('%Y-%m-%d (%A)')}
+        내일: {tomorrow.strftime('%Y-%m-%d (%A)')}
+        모레: {day_after.strftime('%Y-%m-%d (%A)')}
+        
+        당신의 역할은 사용자의 문장에서 데이트 코스 생성에 필요한 정보를 추출하는 것입니다.
+        유저는 다음 요소를 포함할 수 있습니다:
+        - 날짜(date):
+            YYYY-MM-DD 형식으로 변환
+            "오늘", "내일", "모레", "12월 5일", "2025-01-17", "다음주 토요일"
+        - 템플릿(template): 
+            - "full_day"
+            - "half_day_lunch"
+            - "half_day_dinner"
+            - "cafe_date"
+            - "active_date"
+            - "culture_date"
+            - 또는 유저가 직접 지정하지 않으면 "auto"
+        - 키워드(keyword): 특정 장소나 지역 (예: "인천문화예술회관", "송도 센트럴파크")
+        
+        예시:
+        "내일 인천문화예술회관 주변 데이트코스 추천해줘" → generate_course (date: 내일, template: auto, keyword: 인천문화예술회관)
+        ### 출력 형식(JSON)
+        {{
+            "date": string or null,
+            "template": string or null,
+            "keyword": string or null
+        }}
+        """
+    elif action == "regenerate_course_slot":
+        prompt = f"""
+        당신의 역할은 사용자의 문장에서 데이트 코스에서 특정 slot 재생성에 필요한 정보를 추출하는 것입니다.
+        사용자의 문장에서 아래 4가지를 추출하세요.
+        
+        - slot_index: 숫자 (1번 슬롯 → 1)
+        - category : 
+            - 입력 문맥에서 주요 카테고리를 유추  
+            - food / cafe / culture_art / activity_sports / nature_healing / craft_experience / shopping 중 하나  
+            - 없다면 null
+        - keyword: 사용자가 원하는 특정 장소명 또는 특정 음식 키워드 (없으면 null)
+        - {get_extra_feature_service().get_prompt_fragment()}
+        
+        아래 규칙을 따라라:
+
+        1) "1번 슬롯", "2번 슬롯", "X번 슬롯"이 있으면 숫자를 slot_index로 추출한다.
+        2) "파스타맛집", "초밥", "라멘" 등 음식 키워드는 keyword로 추출하고 category는 food로 설정한다.
+        3) "카페", "브런치", "디저트" 등은 category=cafe로 설정한다.
+        4) "분위기 좋은", "조용한", "트렌디한", "저렴한", "별점 높은" 같은 표현은 extra_feature로 변환한다.
+            - 분위기 좋은 → atmosphere_romantic
+            - 조용한 → atmosphere_quiet
+            - 트렌디한 → atmosphere_trendy
+            - 저렴한 → price_cheap
+            - 별점 높은 → rating_high
+        5) 사용자가 슬롯 번호를 말하지 않았을 경우 slot_index=null로 두고,
+        대신 "카페 다른 곳으로"처럼 특정 슬롯 유형을 언급했다면 keyword나 category만 채운다.
+
+        예시 입력 → 예시 출력(JSON):
+
+        "1번 슬롯 다른 장소로"
+        → {{"slot_index": 1, "category": null, "keyword": null, "extra_feature": null}}
+
+        "1번 슬롯 파스타맛집으로"
+        → {{"slot_index": 1, "category": "food", "keyword": "파스타맛집", "extra_feature": null}}
+
+        "카페 다른 곳으로"
+        → {{"slot_index": null, "category": "cafe", "keyword": null, "extra_feature": null}}
+
+        "분위기 좋은 카페로"
+        → {{"slot_index": null, "category": "cafe", "keyword": null, "extra_feature": "atmosphere_romantic"}}
+
+        반드시 JSON만 출력하라:
+
+        {{
+            "slot_index": int or null,
+            "category": string or null,
+            "keyword": string or null,
+            "extra_feature": string or null
+        }}
+        """
+    elif action=="view_schedule":
+        prompt = f"""
+        오늘: {today.strftime('%Y-%m-%d (%A)')}
+        내일: {tomorrow.strftime('%Y-%m-%d (%A)')}
+        모레: {day_after.strftime('%Y-%m-%d (%A)')}
+        당신의 역할은 사용자의 문장에서 일정 정보에 필요한 정보를 추출하는 것입니다.
+        유저는 다음 요소를 포함할 수 있습니다:
+        -날짜(timeframe): 
+            일정 조회범위. (today/tomorrow/this_week/all) 중에 하나만 가능
+            today, tomorrow, this_week에 해당 안되는 경우에도 all
+        ### 출력 형식(JSON)
+        {{
+            "timeframe": string or null,
+        }}
+        """
+
+    return prompt
+
+async def summarize_schedule(schedules: list, timeframe: str):
+    compact = []
+    for i, schedule in enumerate(schedules, 1):
+        day_entry = []
+        for slot in schedule:
+            day_entry.append({
+                "time": slot.get("time"),
+                "duration": slot.get("duration"),
+                "place_name": slot.get("place_name"),
+                "address": slot.get("address"),
+            })
+        compact.append(day_entry)
+    today = datetime.now()
+    tomorrow = today + timedelta(days=1)
+    day_after = today + timedelta(days=2)  
+    system_prompt = f"""
+        오늘: {today.strftime('%Y-%m-%d (%A)')}
+        내일: {tomorrow.strftime('%Y-%m-%d (%A)')}
+        모레: {day_after.strftime('%Y-%m-%d (%A)')}
+        당신은 데이트/일정 관리 도우미 AI입니다.
+        아래 JSON 형식의 일정 목록을 보고, 사용자가 이해하기 쉽게
+        자연스러운 한국어로 요약해서 설명해 주세요.
+
+        - 너무 딱딱한 말투보다는, 친절한 비서처럼 말해 주세요.
+        - 일정이 여러 개면 번호나 줄바꿈을 적당히 써서 보기 좋게 정리해 주세요.
+        - 같은 날에 여러 슬롯이 있으면, 시간 순서대로 설명해도 좋습니다.
+        - 장소 이름과 시간을 중심으로 간단히 설명해 주세요.
+        """
+
+    user_prompt = f"""
+        조회 범위(timeframe): {timeframe}
+
+        아래는 일정 데이터입니다(JSON):
+
+        {compact}
+
+        위 데이터를 기반으로, 사용자가 바로 읽고 이해할 수 있도록
+        구어체 한글로 요약해 주세요.
+        """
+    response = await client.chat.completions.create(
+        model=settings.OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": system_prompt},   # 시스템 프롬프트
+            {"role": "user", "content": user_prompt},    # 사용자의 실제 입력
+        ],
+        temperature=0.3,
+        max_tokens=600,
+    )
+
+    return response.choices[0].message.content.strip()
 
 async def analyze_intent(message: str, context: dict = None, history: list = None):
     """의도 분석 - 개선된 버전"""
 
-    system_prompt = get_system_prompt()
-    print(system_prompt)
+    system_prompt = get_intent_system_prompt()
     messages = [{"role": "system", "content": system_prompt}]
 
     # 🔥 대화 히스토리 더 많이 포함 (2턴 → 6턴)
@@ -185,6 +363,20 @@ async def analyze_intent(message: str, context: dict = None, history: list = Non
     except Exception as e:
         logger.error(f"❌ OpenAI 오류: {e}")
         return fallback_response(message, context)
+
+async def extract_data(action:str, message: str):
+    prompt = get_action_prompt(action)
+    response = await client.chat.completions.create(
+        model=settings.OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": prompt},   # 시스템 프롬프트
+            {"role": "user", "content": message},    # 사용자의 실제 입력
+        ],
+        temperature=0.3,
+        max_tokens=500,
+        response_format={"type": "json_object"}
+    )
+    return json.loads(response.choices[0].message.content)
 
 def fallback_response(message: str, context: dict = None) -> dict:
     """폴백 - 더 관대하게"""

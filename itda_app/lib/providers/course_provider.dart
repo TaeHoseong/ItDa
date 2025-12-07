@@ -423,8 +423,8 @@ class CourseProvider extends ChangeNotifier {
       final created = DateCourse.fromJson(insertedJson);
 
       _coursesById[newId] = created;
-      _courseIds = updatedIds;
       notifyListeners();
+      
 
       return created;
     } catch (e, st) {

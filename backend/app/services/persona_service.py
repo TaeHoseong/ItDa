@@ -1,7 +1,7 @@
 from typing import Dict
 from datetime import datetime, timedelta
 from app.schemas.persona import ChatRequest, ChatResponse
-from app.services.openai_service import analyze_intent
+from app.services.openai_service import analyze_intent, extract_data, summarize_schedule
 from app.services.suggest_service import SuggestService
 from app.core.supabase_client import get_supabase
 from app.services.course_service import CourseService
@@ -59,23 +59,21 @@ class PersonaService:
 
         if action == "general_chat":
             response_data = self._handle_general_chat(session)
-
         elif action == "update_info":
-            response_data = self._handle_update_info(session, intent)
-
+            response_data = await self._handle_update_info(session, intent, request)
         elif action == "recommend_place":
-            response_data = self._handle_recommend_place(session, intent, request.user_id, request.user_lat, request.user_lng)
+            response_data = await self._handle_recommend_place(session, intent, request, request.user_id, request.user_lat, request.user_lng)
         elif action == "re_recommend_place":
             response_data = self._handle_re_recommend_place(session, intent, request.user_id, request.user_lat, request.user_lng)
         elif action == "select_place":
-            response_data = await self._handle_select_place(session, intent)
+            response_data = await self._handle_select_place(session, intent, request)
         elif action == "generate_course":
-            response_data = self._handle_generate_course(session, intent, request.user_id, request.user_lat, request.user_lng)
+            response_data = await self._handle_generate_course(session, intent, request, request.user_id, request.user_lat, request.user_lng)
         elif action == "view_schedule":
-            response_data = self._handle_view_schedule(session, intent, request.user_id)
+            response_data = await self._handle_view_schedule(session, intent, request, request.user_id)
         elif action == "regenerate_course_slot":
             print(f"\n[ACTION] Calling _handle_regenerate_course_slot")
-            response_data = self._handle_regenerate_course_slot(session, intent, request.user_id, request.user_lat, request.user_lng)
+            response_data = await self._handle_regenerate_course_slot(session, intent, request, request.user_id, request.user_lat, request.user_lng)
             print(f"[ACTION] Response data keys: {response_data.keys() if response_data else None}")
 
         # improved_message가 있으면 그걸 사용, 없으면 intent["message"] 사용
@@ -112,20 +110,66 @@ class PersonaService:
             "action_taken": "general_chat"
         }
 
-    def _handle_update_info(self, session: dict, intent: dict) -> dict:
+    async def _handle_update_info(self, session: dict, intent: dict, request: ChatRequest) -> dict:
         """정보 수집 중"""
+        
         missing = self._check_missing_fields(session["pending_data"])
-
+        extracted_data = await extract_data("update_info", request.message)
+        
         print(f"[UPDATE INFO] Collecting information")
-        print(f"   Current data: {session['pending_data']}")
+        print(f"   Updated data: {extracted_data}")
         print(f"   Missing fields: {missing}")
-
-        return {
-            "action_taken": "update_info",
-            "pending_data": session["pending_data"],
-            "missing_fields": missing
+        
+        for field in missing:
+            session["pending_data"][field] = extracted_data[field]
+        
+        
+        schedule_data = {
+            "title": session["pending_data"]["title"],
+            "date": session["pending_data"]["date"],
+            "time": session["pending_data"]["time"],
+            "place_name": session["pending_data"].get("place_name"),
+            "latitude": session["pending_data"].get("latitude"),
+            "longitude": session["pending_data"].get("longitude"),
+            "address": session["pending_data"].get("address"),
+            "duration": session["pending_data"].get("duration", 60)
         }
+        
+        missing = self._check_missing_fields(session["pending_data"])
+        if missing:
+            map = {
+                "title": "일정 이름",
+                "date": "날짜",
+                "time": "시간"
+            }
+            missing_kor = [map[m] for m in missing]
+            improved_message = (
+                "좋아요! 거의 다 왔어요 😊\n"
+                f"아직 {', '.join(missing_kor)} 정보가 필요해요.\n"
+                "추가로 알려주실 수 있을까요?"
+            )
+            return {
+                "action_taken": "need_more_info",
+                "pending_data": session["pending_data"],
+                "missing_fields": missing,
+                "improved_message": improved_message
+            }
 
+        improved_message = (
+            "🎉 일정이 완성되었어요!\n\n"
+            f"📌 제목: {schedule_data['title']}\n"
+            f"📅 날짜: {schedule_data['date']}\n"
+            f"⏰ 시간: {schedule_data['time']}\n"
+        )
+        session["pending_data"] = {}
+        session["recommended_places"] = [] 
+        return {
+                "action_taken": "schedule_ready",
+                "schedule_data": schedule_data,  # 프론트엔드가 이 데이터로 API 호출
+                "improved_message": improved_message
+            }
+
+            
     def _is_complete(self, data: dict) -> bool:
         """필수 정보 완전성 체크"""
         required = ["title", "date", "time"]
@@ -138,12 +182,14 @@ class PersonaService:
         missing = [field for field in required if not data.get(field)]
         return missing
 
-    def _handle_recommend_place(self, session: dict, intent: dict, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
+    async def _handle_recommend_place(self, session: dict, intent: dict, request: ChatRequest, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
         """장소 추천 처리"""
-        specific_food = intent["extracted_data"]["food"]
-        category = intent["extracted_data"]["category"]
-        extra_feature = intent["extracted_data"].get("extra_feature")  # extra_feature는 없을 수 있음
         
+        extracted_data = await extract_data(action=intent['action'], message=request.message)
+        specific_food = extracted_data["specific_food"]
+        category = extracted_data["category"]
+        extra_feature = extracted_data["extra_feature"]  # extra_feature는 없을 수 있음
+
         print(f"\n{'='*60}")
         print(f"[RECOMMENDATION START]")
         print(f"   User ID: {user_id}")
@@ -209,10 +255,10 @@ class PersonaService:
             "count": len(new_places)
         }
         
-    async def _handle_select_place(self, session: dict, intent: dict) -> dict:
+    async def _handle_select_place(self, session: dict, intent: dict, request: ChatRequest) -> dict:
         """장소 선택 및 일정에 추가"""
 
-        extracted = intent.get("extracted_data", {})
+        extracted = await extract_data(action="select_place", message=request.message)
         place_index = extracted.get("place_index")  # 1, 2, 3, 4, 5
         place_name = extracted.get("place_name")  # "스타벅스"
 
@@ -304,7 +350,7 @@ class PersonaService:
                 "improved_message": improved_message
             }
 
-    def _handle_generate_course(self, session: dict, intent: dict, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
+    async def _handle_generate_course(self, session: dict, intent: dict, request: ChatRequest, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
         """데이트 코스 생성 처리"""
 
         # pending_data 초기화
@@ -316,7 +362,7 @@ class PersonaService:
                 "message": "로그인이 필요합니다."
             }
 
-        extracted = intent.get("extracted_data", {})
+        extracted = await extract_data("generate_course", message=request.message)
 
         # 날짜 추출 (기본값: 오늘)
         date_str = extracted.get("date")
@@ -331,7 +377,7 @@ class PersonaService:
         start_time = extracted.get("start_time")
         duration = extracted.get("duration")
         exclude_slots = extracted.get("exclude_slots")
-        keyword = extracted.get("keyword")
+        keyword = extracted.get("keyword", "")
         if start_time or duration or exclude_slots:
             preferences = CoursePreferences(
                 start_time=start_time,
@@ -434,7 +480,7 @@ class PersonaService:
                 "message": f"코스 생성 중 오류가 발생했습니다: {str(e)}"
             }
 
-    def _handle_regenerate_course_slot(self, session: dict, intent: dict, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
+    async def _handle_regenerate_course_slot(self, session: dict, intent: dict, request: ChatRequest, user_id: str = None, user_lat: float = None, user_lng: float = None) -> dict:
         """코스의 특정 슬롯 재생성 처리"""
 
         # 세션에 저장된 코스 확인
@@ -450,7 +496,7 @@ class PersonaService:
                 "message": "로그인이 필요합니다."
             }
 
-        extracted = intent.get("extracted_data", {})
+        extracted = await extract_data("regenerate_course_slot", request.message)
         slot_index = extracted.get("slot_index")
         category = extracted.get("category")
         keyword = extracted.get("keyword")
@@ -468,8 +514,8 @@ class PersonaService:
         print(f"\n{'='*60}")
         print(f"[REGENERATE SLOT] #{slot_index}")
         print(f"   User Location: ({user_lat}, {user_lng})")
-        if extra_feature:
-            print(f"[EXTRA_FEATURE] {extra_feature}")
+        if extracted:
+            print(f"[EXTRACTED] {extracted}")
         print(f"{'='*60}\n")
 
         try:
@@ -553,7 +599,7 @@ class PersonaService:
                 "message": f"슬롯 재생성 중 오류가 발생했습니다: {str(e)}"
             }
             
-    def _handle_view_schedule(self, session: dict, intent: dict, user_id: str = None) -> dict:
+    async def _handle_view_schedule(self, session: dict, intent: dict, request: ChatRequest, user_id: str = None) -> dict:
         """일정 조회 처리"""
 
         # pending_data 초기화 (일정 조회는 독립적인 액션)
@@ -571,7 +617,7 @@ class PersonaService:
                 "message": "로그인이 필요합니다."
             }
 
-        extracted = intent.get("extracted_data", {})
+        extracted = await extract_data("view_schedule", request.message )
         timeframe = extracted.get("timeframe", "all")
 
         print(f"\n{'='*60}")
@@ -606,26 +652,7 @@ class PersonaService:
 
         print(f"[FOUND] {len(schedules)} schedule(s)")
 
-        # 일정 포맷팅
-        formatted_message = None
-        formatted_message = ""
-        if len(schedules) == 0:
-            # TODO: 일정이 없을 경우 "일정을 알려드릴게요!"하는 에러 처리용. 임시이므로 좀 더 개선 필요 (홍재형) 
-            formatted_message = f"{timeframe}에는 아직 일정이 없어요!"
-        else:
-            for i, schedule in enumerate(schedules, 1):
-                schedule_lines = []
-                for idx, slot in enumerate(schedule, 1):
-                    time_str = slot['time'] if slot['time'] else "시간 미정"
-                    duration = slot['duration'] if slot['duration'] else ""
-
-                    place_str = f" @ {slot['place_name']}" if ['place_name'] else ""
-
-                    schedule_lines.append(
-                        f"-{idx}. [{time_str} for {duration}min.]{place_str}"
-                    )
-                
-                formatted_message += "\n"+ f"{i}번째 일정:\n" + "\n".join(schedule_lines)
+        formatted_message = await summarize_schedule(schedules, timeframe)
 
         # 응답 데이터 준비
         # 11.21 : schedules_data 일단 주석처리. 이거 어디 쓰이는건지?
