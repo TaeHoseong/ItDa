@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, persona, places, users, courses, match, feedback, search, wishlist, user_places
+from app.api.v1.endpoints import auth, persona, places, users, courses, match, feedback, search, wishlist, user_places, admin
 
 api_router = APIRouter()
 
@@ -71,4 +71,11 @@ api_router.include_router(
     user_places.router,
     prefix="/user-places",
     tags=["user-places"]
+)
+
+# 관리자
+api_router.include_router(
+    admin.router,
+    prefix="/admin",
+    tags=["admin"]
 )
