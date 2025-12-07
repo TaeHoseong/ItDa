@@ -12,4 +12,8 @@ class ApiConfig {
   // static const String baseUrl = 'http://192.168.x.x:8000/api/v1';
 
   static const Duration timeout = Duration(seconds: 30);
+
+  // Google OAuth Web Client ID (for serverClientId)
+  static const String googleServerClientId =
+      '545845229063-okupe6in5bos5lkb9n4apc18t62hpqj1.apps.googleusercontent.com';
 }
