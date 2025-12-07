@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/date_course.dart';
 import '../services/feedback_api_service.dart';
+import '../services/user_place_api_service.dart';
 
 /// =====================
 /// 캘린더 상태 (보기 전용)
@@ -194,6 +195,23 @@ class CourseProvider extends ChangeNotifier {
       throw StateError(
         'CourseProvider: coupleId가 설정되지 않았습니다. initForCouple()를 먼저 호출하세요.',
       );
+    }
+  }
+
+  /// 슬롯들을 개인 장소로 저장 (비동기, 실패해도 무시)
+  void _saveSlotAsUserPlaces(List<CourseSlot> slots) {
+    for (final slot in slots) {
+      // 장소 정보가 있는 슬롯만 저장
+      if (slot.placeName.isNotEmpty) {
+        UserPlaceApiService.addUserPlace(
+          name: slot.placeName,
+          latitude: slot.latitude,
+          longitude: slot.longitude,
+          addedFrom: 'course',
+          address: slot.placeAddress,
+          category: slot.slotType, // slotType을 category로 사용 (food, cafe, activity 등)
+        );
+      }
     }
   }
 
@@ -423,8 +441,11 @@ class CourseProvider extends ChangeNotifier {
       final created = DateCourse.fromJson(insertedJson);
 
       _coursesById[newId] = created;
+      _courseIds = updatedIds;
       notifyListeners();
-      
+
+      // 슬롯들을 개인 장소로 저장 (실패해도 코스 생성은 성공으로 처리)
+      _saveSlotAsUserPlaces(course.slots);
 
       return created;
     } catch (e, st) {

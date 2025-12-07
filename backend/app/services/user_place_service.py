@@ -181,13 +181,9 @@ class UserPlaceService:
         """
         카테고리 기반 기본 features 반환
 
-        네이버 Local Search API 카테고리 형식: "대분류>세부분류"
-        예시:
-        - "음식점>육류,고기요리"
-        - "카페,디저트>카페"
-        - "문화,예술>박물관"
-        - "스포츠,레저>볼링장"
-        - "여행,명소>궁궐"
+        지원 형식:
+        1. 네이버 Local Search API: "대분류>세부분류" (예: "음식점>육류,고기요리")
+        2. Flutter slotType: "food", "cafe", "activity", "culture", "nature"
         """
         if not category:
             return copy.deepcopy(NEUTRAL_FEATURES)
@@ -195,8 +191,19 @@ class UserPlaceService:
         # 대분류 추출 (첫 번째 ">" 앞부분)
         main_category = category.split(">")[0].lower()
 
-        # 1단계: 대분류 기반 매핑 (확실한 매핑)
-        # 네이버 API 대분류 목록 기반
+        # 1단계: 영문 카테고리 (Flutter slotType) 직접 매핑
+        if main_category == 'food':
+            return copy.deepcopy(DEFAULT_FEATURES["food"])
+        if main_category == 'cafe':
+            return copy.deepcopy(DEFAULT_FEATURES["cafe"])
+        if main_category == 'activity':
+            return copy.deepcopy(DEFAULT_FEATURES["activity"])
+        if main_category == 'culture':
+            return copy.deepcopy(DEFAULT_FEATURES["culture"])
+        if main_category == 'nature':
+            return copy.deepcopy(DEFAULT_FEATURES["nature"])
+
+        # 2단계: 한글 카테고리 (네이버 API 대분류) 매핑
         if '음식점' in main_category:
             return copy.deepcopy(DEFAULT_FEATURES["food"])
         if '카페' in main_category or '디저트' in main_category:
@@ -210,8 +217,7 @@ class UserPlaceService:
         if '여행' in main_category or '명소' in main_category:
             return copy.deepcopy(DEFAULT_FEATURES["nature"])
 
-        # 2단계: 대분류 매핑 실패 시 NEUTRAL 반환
-        # (세부분류 추측보다 안전한 기본값 사용)
+        # 3단계: 매핑 실패 시 NEUTRAL 반환
         return copy.deepcopy(NEUTRAL_FEATURES)
 
     def add_user_place(self, user_id: str, data: dict) -> dict:
