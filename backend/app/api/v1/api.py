@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, persona, places, users, courses, match, feedback, search, wishlist
+from app.api.v1.endpoints import auth, persona, places, users, courses, match, feedback, search, wishlist, user_places
 
 api_router = APIRouter()
 
@@ -64,4 +64,11 @@ api_router.include_router(
     wishlist.router,
     prefix="/wishlist",
     tags=["wishlist"]
+)
+
+# 개인 장소
+api_router.include_router(
+    user_places.router,
+    prefix="/user-places",
+    tags=["user-places"]
 )
