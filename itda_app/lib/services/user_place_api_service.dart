@@ -63,18 +63,20 @@ class UserPlaceApiService {
         body: jsonEncode(body),
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data == null) {
-          debugPrint('[UserPlace] 정식 DB에 이미 있는 장소: $name');
-          return null;
-        }
-        debugPrint('[UserPlace] 저장 완료: $name');
-        return data as Map<String, dynamic>;
-      } else {
-        debugPrint('[UserPlace] 저장 실패 (${response.statusCode}): ${response.body}');
+      if (response.statusCode == 204) {
+        // 정식 DB에 이미 있는 장소
+        debugPrint('[UserPlace] 정식 DB에 이미 있는 장소: $name');
         return null;
       }
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        debugPrint('[UserPlace] 저장 완료: $name');
+        return data as Map<String, dynamic>;
+      }
+
+      debugPrint('[UserPlace] 저장 실패 (${response.statusCode}): ${response.body}');
+      return null;
     } catch (e) {
       debugPrint('[UserPlace] 저장 중 오류: $e');
       return null;

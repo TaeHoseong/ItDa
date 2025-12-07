@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/wishlist.dart';
 import '../services/wishlist_api_service.dart';
+import '../services/user_place_api_service.dart';
 
 /// 찜목록 상태 관리 Provider
 class WishlistProvider extends ChangeNotifier {
@@ -54,6 +55,17 @@ class WishlistProvider extends ChangeNotifier {
       _wishlists.insert(0, wishlist); // 최신순으로 맨 앞에 추가
       notifyListeners();
       debugPrint('찜 추가 완료: ${wishlist.placeName}');
+
+      // 개인 장소로도 저장 (실패해도 찜 추가는 성공으로 처리)
+      UserPlaceApiService.addUserPlace(
+        name: placeName,
+        latitude: latitude,
+        longitude: longitude,
+        addedFrom: 'wishlist',
+        address: address,
+        category: category,
+      );
+
       return true;
     } catch (e) {
       debugPrint('찜 추가 실패: $e');
