@@ -3,7 +3,7 @@ class ApiConfig {
   //static const String baseUrl = 'https://bibless-ingrid-unmurmured.ngrok-free.dev/api/v1';
 
   // Android 에뮬레이터에서 localhost 접근
-  static const String baseUrl = 'http://10.0.2.2:8000/api/v1';
+  static const String baseUrl = 'https://itda.onrender.com/api/v1';
 
   // iOS 시뮬레이터 (Mac에서)
   // static const String baseUrl = 'http://localhost:8000/api/v1';
